@@ -45,7 +45,7 @@ namespace dyno
 
 		this->animationPipeline()->pushModule(merge);
 
-		auto iterSolver = std::make_shared<PCGConstraintSolver<TDataType>>();
+		auto iterSolver = std::make_shared<PJSConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(iterSolver->inTimeStep());
 		this->varFrictionEnabled()->connect(iterSolver->varFrictionEnabled());
 		this->varGravityEnabled()->connect(iterSolver->varGravityEnabled());
@@ -62,6 +62,7 @@ namespace dyno
 		this->stateQuaternion()->connect(iterSolver->inQuaternion());
 		this->stateInitialInertia()->connect(iterSolver->inInitialInertia());
 		this->stateTopology()->connect(iterSolver->inDiscreteElements());
+		this->stateFixedTag()->connect(iterSolver->inFixedTag());
 		merge->outContacts()->connect(iterSolver->inContacts());
 		this->animationPipeline()->pushModule(iterSolver);
 
@@ -109,7 +110,7 @@ namespace dyno
 		bd.position = b.center + bd.offset;
 
 		bd.mass = density * lx * ly * lz;
-		//printf("Box mass : %lf\n", bd.mass);
+		printf("Box mass : %lf\n", bd.mass);
 		bd.inertia = 1.0f / 12.0f * bd.mass
 			* Mat3f(ly * ly + lz * lz, 0, 0,
 				0, lx * lx + lz * lz, 0,
@@ -126,6 +127,7 @@ namespace dyno
 		actor->shapeType = ET_BOX;
 		actor->center = bd.position;
 		actor->rot = b.rot;
+		actor->mass = bd.mass;
 		
 		return actor;
 	}
@@ -145,7 +147,7 @@ namespace dyno
 		if (bd.mass <= 0.0f) {
 			bd.mass = 4 / 3.0f*M_PI*r*r*r*density;
 		}
-		//printf("Sphere mass : %lf\n", bd.mass);
+		printf("Sphere mass : %lf\n", bd.mass);
 		float I11 = r * r;
 		bd.inertia = 0.4f * bd.mass
 			* Mat3f(I11, 0, 0,
@@ -163,6 +165,7 @@ namespace dyno
 		actor->shapeType = ET_SPHERE;
 		actor->center = bd.position;
 		actor->rot = b.rot;
+		actor->mass = bd.mass;
 
 		return actor;
 	}
@@ -221,7 +224,7 @@ namespace dyno
 		actor->shapeType = ET_TET;
 		actor->center = bd.position;
 		actor->rot = Quat<Real>();
-
+		actor->mass = bd.mass;
 		return actor;
 	}
 
@@ -270,7 +273,7 @@ namespace dyno
 		actor->shapeType = ET_CAPSULE;
 		actor->center = bd.position;
 		actor->rot = b.rot;
-
+		actor->mass = bd.mass;
 		return actor;
 	}
 
@@ -384,6 +387,8 @@ namespace dyno
 		joints[tId] = joint;
 	}
 
+	
+
 	template<typename TDataType>
 	void RigidBodySystem<TDataType>::resetStates()
 	{
@@ -441,6 +446,11 @@ namespace dyno
 		this->stateQuaternion()->resize(sizeOfRigids);
 		this->stateCollisionMask()->resize(sizeOfRigids);
 		this->stateAttribute()->resize(sizeOfRigids);
+		this->stateFixedTag()->resize(sizeOfRigids);
+
+		mHostTag.resize(sizeOfRigids);
+		calculateTag(eleOffset);
+		this->stateFixedTag()->getData().assign(mHostTag);
 
 		cuExecute(sizeOfRigids,
 			RB_SetupInitialStates,
@@ -494,6 +504,16 @@ namespace dyno
 			eleOffset);
 
 		updateTopology();
+	}
+
+	template<typename TDataType>
+	void RigidBodySystem<TDataType>::calculateTag(ElementOffset &offset)
+	{
+		for (auto& iter : mFixedRigids)
+		{
+			int id = iter->idx + offset.checkElementOffset(iter->shapeType);
+			mHostTag[id] = 1;
+		}
 	}
 	
 	template <typename Real, typename Coord>

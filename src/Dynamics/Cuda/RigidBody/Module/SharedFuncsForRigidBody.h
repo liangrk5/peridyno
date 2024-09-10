@@ -11,6 +11,8 @@
 
 #include "Algorithm/Reduction.h"
 
+#include "Collision/Attribute.h"
+
 namespace dyno 
 {
 	void ApplyTransform(
@@ -23,6 +25,7 @@ namespace dyno
 		const DArray<int>& bindingtag);
 
 	void updateVelocity(
+		DArray<int> tags,
 		DArray<Vec3f> velocity,
 		DArray<Vec3f> angular_velocity,
 		DArray<Vec3f> impulse,
@@ -66,6 +69,16 @@ namespace dyno
 		DArray<Mat3f> rotMat,
 		DArray<TConstraintPair<float>> constraints
 	);
+	void calculateJacobianMatrixQuat(
+		DArray<Vec3f> J,
+		DArray<Vec3f> B,
+		DArray<Vec3f> pos,
+		DArray<Mat3f> inertia,
+		DArray<float> mass,
+		DArray<Mat3f> rotMat,
+		DArray<Quat1f> rotQuat,
+		DArray<TConstraintPair<float>> constraints
+	);
 
 	void calculateJacobianMatrixForNJS(
 		DArray<Vec3f> J,
@@ -94,6 +107,20 @@ namespace dyno
 		DArray<Vec3f> pos,
 		DArray<Quat1f> rotation_q,
 		DArray <TConstraintPair<float>> constraints,
+		DArray<float> errors,
+		float slop,
+		float beta,
+		float dt
+	);
+
+	void calculateEtaVectorForPJSBaumgarteQuat(
+		DArray<float> eta,
+		DArray<Vec3f> J,
+		DArray<Vec3f> velocity,
+		DArray<Vec3f> angular_velocity,
+		DArray<Vec3f> pos,
+		DArray<Quat1f> rotation_q,
+		DArray<TConstraintPair<float>> constraints,
 		DArray<float> errors,
 		float slop,
 		float beta,
@@ -189,6 +216,15 @@ namespace dyno
 		DArray<TConstraintPair<float>> constraints,
 		DArray<FixedJoint<float>> joints,
 		DArray<Mat3f> rotMat,
+		DArray<Quat1f> rotQuat,
+		int begin_index
+	);
+
+	void setUpFixedJointConstraintsQuat(
+		DArray<TConstraintPair<float>> constraints,
+		DArray<FixedJoint<float>> joints,
+		DArray<Mat3f> rotMat,
+		DArray<Quat1f> rotQuat,
 		int begin_index
 	);
 
@@ -260,21 +296,6 @@ namespace dyno
 		float dt
 	);
 
-	void JacobiIterationStrict(
-		DArray<float> lambda,
-		DArray<Vec3f> impulse,
-		DArray<Vec3f> J,
-		DArray<Vec3f> B,
-		DArray<float> eta,
-		DArray<TConstraintPair<float>> constraints,
-		DArray<int> nbq,
-		DArray<float> d,
-		DArray<float> mass,
-		float mu,
-		float g,
-		float dt
-	);
-
 	void JacobiIterationForSoft(
 		DArray<float> lambda,
 		DArray<Vec3f> impulse,
@@ -313,18 +334,17 @@ namespace dyno
 		float dt
 	);
 
-
-	Real checkOutError(
-		DArray<Vec3f> J,
-		DArray<Vec3f> mImpulse,
-		DArray<TConstraintPair<float>> constraints,
-		DArray<float> eta
-	);
-
 	void calculateDiagnals(
 		DArray<float> d,
 		DArray<Vec3f> J,
 		DArray<Vec3f> B
+	);
+
+	void calculateDiagnalsInv(
+		DArray<float> d_inv,
+		DArray<Vec3f> J,
+		DArray<Vec3f> B,
+		DArray<Real> CFM
 	);
 
 	void preConditionJ(
@@ -346,20 +366,7 @@ namespace dyno
 		DArray<Vec3f> angular_velocity,
 		DArray <TConstraintPair<float>> constraints
 	);
-
-	double checkOutErrors(
-		DArray<float> errors
-	);
 	
-
-
-	void calculateMatrixA(
-		DArray<Vec3f> &J,
-		DArray<Vec3f> &B,
-		DArray<float> &A,
-		DArray<TConstraintPair<float>> &constraints,
-		float k
-	);
 
 	bool saveMatrixToFile(
 		DArray<float> &Matrix,
@@ -370,76 +377,6 @@ namespace dyno
 	bool saveVectorToFile(
 		DArray<float>& vec,
 		const std::string& filename
-	);
-
-	void vectorSub(
-		DArray<float> &ans,
-		DArray<float> &subtranhend,
-		DArray<float> &minuend,
-		DArray<TConstraintPair<float>> &constraints
-	);
-
-	void vectorAdd(
-		DArray<float>& ans,
-		DArray<float>& v1,
-		DArray<float>& v2,
-		DArray<TConstraintPair<float>>& constraints
-	);
-
-	void vectorMultiplyScale(
-		DArray<float> &ans,
-		DArray<float> &initialVec,
-		float scale,
-		DArray<TConstraintPair<float>>& constraints
-	);
-
-	void vectorClampSupport(
-		DArray<float> v,
-		DArray<TConstraintPair<float>> constraints
-	);
-
-	void vectorClampFriction(
-		DArray<float> v,
-		DArray<TConstraintPair<float>> constraints,
-		int contact_size,
-		float mu
-	);
-
-	void matrixMultiplyVec(
-		DArray<Vec3f> &J,
-		DArray<Vec3f> &B,
-		DArray<float> &lambda,
-		DArray<float> &ans,
-		DArray<TConstraintPair<float>> &constraints,
-		int bodyNum
-	);
-
-	float vectorNorm(
-		DArray<float> &a,
-		DArray<float> &b
-	);
-
-	void vectorMultiplyVector(
-		DArray<float>& v1,
-		DArray<float>& v2,
-		DArray<float>& ans,
-		DArray<TConstraintPair<float>>& constraints
-	);
-
-	void calculateImpulseByLambda(
-		DArray<float> lambda,
-		DArray<TConstraintPair<float>> constraints,
-		DArray<Vec3f> impulse,
-		DArray<Vec3f> B
-	);
-
-	void preconditionedResidual(
-		DArray<float> &residual,
-		DArray<float> &ans,
-		DArray<float> &k_1,
-		DArray<Mat2f> &k_2,
-		DArray<Mat3f> &k_3,
-		DArray<TConstraintPair<float>> &constraints
 	);
 
 	void buildCFMAndERP(
@@ -453,13 +390,71 @@ namespace dyno
 		float dt
 	);
 
-	void calculateLinearSystemLHS(
-		DArray<Vec3f>& J,
-		DArray<Vec3f>& B,
+	void vectorAdd(
+		DArray<float> &result,
+		DArray<float> &arr1,
+		DArray<float> &arr2
+	);
+
+	void vectorMultiplyScale(
+		DArray<float> &result,
+		DArray<float> &initArr,
+		float scale
+	);
+
+	float innerDotOfVector(
+		DArray<float> &arr1,
+		DArray<float> &arr2
+	);
+
+	void calculateGradient(
+		DArray<float> &freeGradient,
+		DArray<float> &choppedGradient,
+		DArray<float> &gradient,
+		DArray<Vec3f> &impulse,
+		DArray<Vec3f> &J,
+		DArray<Vec3f> &B,
+		DArray<float> &d_inv,
+		DArray<float> &lambda,
+		DArray<float> &eta,
+		DArray<float> &CFM,
+		DArray<TConstraintPair<float>> &constraints
+	);
+
+	
+	void calculateAx(
+		DArray<float> &Ax,
+		DArray<Vec3f> &impulse,
+		DArray<Vec3f> &J,
+		DArray<Vec3f> &B,
+		DArray<float> &d_inv,
+		DArray<float> &lambda,
+		DArray<float> &CFM,
+		DArray<TConstraintPair<float>> &constraints
+	);
+
+	float calculateMaxStep(
+		DArray<float>& p,
+		DArray<float>& lambda,
+		DArray<TConstraintPair<float>>& constraints,
+		float alpha_cg
+	);
+
+	void projectionLambda(
+		DArray<float>& lambda,
+		DArray<TConstraintPair<float>>& constraints
+	);
+
+	void calculateImpulse(
 		DArray<Vec3f>& impulse,
 		DArray<float>& lambda,
-		DArray<float>& ans,
-		DArray<float>& CFM,
+		DArray<float>& d_inv,
+		DArray<Vec3f>& B,
 		DArray<TConstraintPair<float>>& constraints
+	);
+
+	void initLambda(
+		float initValue,
+		DArray<float>& lambda
 	);
 }

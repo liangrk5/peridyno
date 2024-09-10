@@ -164,6 +164,7 @@ namespace dyno
 				mVelocityConstraints,
 				joints,
 				this->inRotationMatrix()->getData(),
+				this->inQuaternion()->getData(),
 				begin_index
 			);
 		}
@@ -192,34 +193,44 @@ namespace dyno
 		mB.resize(4 * constraint_size);
 		mEta.resize(constraint_size);
 		mLambda.resize(constraint_size);
-		mResidual.resize(constraint_size);
-		mP.resize(constraint_size);
-		tmpArray.resize(constraint_size);
-		mAp.resize(constraint_size);
-		mZ.resize(constraint_size);
 		mCFM.resize(constraint_size);
 		mERP.resize(constraint_size);
-
-		mK_1.resize(constraint_size);
-		mK_2.resize(constraint_size);
-		mK_3.resize(constraint_size);
+		mD.resize(constraint_size);
+		mD_inv.resize(constraint_size);
+		
+		
 		
 		mJ.reset();
 		mB.reset();
 		mEta.reset();
 		mLambda.reset();
-		mResidual.reset();
-		tmpArray.reset();
-		mAp.reset();
-		mP.reset();
-		mZ.reset();
 		mCFM.reset();
 		mERP.reset();
+		mD.reset();
+		mD_inv.reset();
 
 
-		mK_1.reset();
-		mK_2.reset();
-		mK_3.reset();
+		gradient.resize(constraint_size);
+		freeGradient.resize(constraint_size);
+		reducedGradient.resize(constraint_size);
+		choppedGradient.resize(constraint_size);
+		mP.resize(constraint_size);
+		mAp.resize(constraint_size);
+		mAg.resize(constraint_size);
+		deltaArray.resize(constraint_size);
+
+		gradient.reset();
+		freeGradient.reset();
+		reducedGradient.reset();
+		choppedGradient.reset();
+		mP.reset();
+		mAp.reset();
+		mAg.reset();
+		deltaArray.reset();
+
+		projectionGradient.resize(constraint_size);
+		projectionGradient.reset();
+
 
 		calculateJacobianMatrix(
 			mJ,
@@ -230,6 +241,8 @@ namespace dyno
 			this->inRotationMatrix()->getData(),
 			mVelocityConstraints
 		);
+
+
 
 		buildCFMAndERP(
 			mJ,
@@ -242,9 +255,12 @@ namespace dyno
 			dt
 		);
 
-
-		mErrors.resize(constraint_size);
-		mErrors.reset();
+		calculateDiagnalsInv(
+			mD_inv,
+			mJ,
+			mB,
+			mCFM
+		);
 
 		calculateEtaVectorWithERP(
 			mEta,
@@ -258,21 +274,6 @@ namespace dyno
 			this->varSlop()->getValue(),
 			dt
 		);
-
-
-		calculateKWithCFM(
-			mVelocityConstraints,
-			mJ,
-			mB,
-			this->inCenter()->getData(),
-			this->inInertia()->getData(),
-			this->inMass()->getData(),
-			mK_1,
-			mK_2,
-			mK_3,
-			mCFM
-		);
-
 
 		if (contact_size != 0)
 		{
@@ -307,6 +308,7 @@ namespace dyno
 		}
 
 		updateVelocity(
+			this->inFixedTag()->getData(),
 			this->inVelocity()->getData(),
 			this->inAngularVelocity()->getData(),
 			mImpulseExt,
@@ -318,219 +320,169 @@ namespace dyno
 
 		if (!this->inContacts()->isEmpty() || topo->totalJointSize() > 0)
 		{
-			float r_norm_old = 0.0;
-			float r_norm_new = 0.0;
-			float alpha = 0.0;
-
-
 			initializeJacobian(dt);
 
 			int constraint_size = mVelocityConstraints.size();
 			int contact_size = this->inContacts()->size();
 
-			if (mLambdaOldJoint.size() != 0 && topo->totalJointSize() > 0)
-			{
-				if (this->varFrictionEnabled()->getValue())
-				{
-					mLambda.assign(mLambdaOldJoint, constraint_size - 3 * contact_size, 3 * contact_size, 0);
-				}
-				else
-				{
-					mLambda.assign(mLambdaOldJoint, constraint_size - contact_size, contact_size, 0);
-				}
-			}
-			else
-			{
-				if (topo->totalJointSize() > 0)
-				{
-					if (this->varFrictionEnabled()->getValue())
-					{
-						mLambdaOldJoint.resize(constraint_size - 3 * contact_size);
-						mLambdaOldJoint.assign(mLambda, constraint_size - 3 * contact_size, 0, 3 * contact_size);
-					}
-					else
-					{
-						mLambdaOldJoint.resize(constraint_size - contact_size);
-						mLambdaOldJoint.assign(mLambda, constraint_size - contact_size, 0, 3 * contact_size);
-					}
-				}
-			}
-
-			//r = b - Ax
-			calculateLinearSystemLHS(
+			initLambda(0.1, mLambda);
+			// MPRGP
+			calculateGradient(
+				freeGradient,
+				choppedGradient,
+				gradient,
+				mImpulseC,
 				mJ,
 				mB,
-				mImpulseC,
+				mD_inv,
 				mLambda,
-				tmpArray,
+				mEta,
 				mCFM,
 				mVelocityConstraints
 			);
 
-			vectorSub(
-				mResidual,
-				tmpArray,
-				mEta,
-				mVelocityConstraints
-			);
+			mP.assign(freeGradient);
 
-
-			// z = M^{-1} r
-			preconditionedResidual(
-				mResidual,
-				mZ,
-				mK_1,
-				mK_2,
-				mK_3,
-				mVelocityConstraints
-			);
-			
-			mP.assign(mZ);
-			r_norm_old = vectorNorm(mResidual, mP);
-			float r_norm_init = r_norm_old;
-
-
-			if (r_norm_old > EPSILON)
+			for (int i = 0; i < this->varIterationNumberForVelocitySolverCG()->getValue(); i++)
 			{
-				for (int i = 0; i < this->varIterationNumberForVelocitySolverCG()->getValue(); i++)
+				vectorAdd(projectionGradient, freeGradient, choppedGradient);
+				Real norm = sqrt(innerDotOfVector(projectionGradient, projectionGradient));
+				printf("%lf\n", norm);
+				if (norm <= 1e-4)
+					break;
+				Real gc_norm = innerDotOfVector(choppedGradient, choppedGradient);
+				Real gf_norm = innerDotOfVector(freeGradient, freeGradient);
+				
+
+				if (gc_norm <= gf_norm)
 				{
-					// compute Ap
+
 					mImpulseC.reset();
-					calculateLinearSystemLHS(
+					calculateAx(
+						mAp,
+						mImpulseC,
 						mJ,
 						mB,
-						mImpulseC,
+						mD_inv,
 						mP,
-						mAp,
 						mCFM,
 						mVelocityConstraints
 					);
 
-					alpha = r_norm_old / vectorNorm(mP, mAp);
+					Real alpha_cg = innerDotOfVector(gradient, mP) / innerDotOfVector(mP, mAp);
 
-					// x += alpha * p
-					vectorMultiplyScale(
-						tmpArray,
+					Real alpha_f = calculateMaxStep(
 						mP,
-						alpha,
-						mVelocityConstraints
-					);
-					vectorAdd(
-						mLambda,
-						mLambda,
-						tmpArray,
-						mVelocityConstraints
-					);
-					// clamp x
-					vectorClampSupport(
-						mLambda,
-						mVelocityConstraints
-					);
-
-					vectorClampFriction(
 						mLambda,
 						mVelocityConstraints,
-						this->inContacts()->size(),
-						this->varFrictionCoefficient()->getValue()
+						alpha_cg
 					);
 
-					
-					// recompute r
+					vectorMultiplyScale(deltaArray, mP, -alpha_cg);
+					vectorAdd(mLambda, mLambda, deltaArray);
+
+					if (alpha_cg <= alpha_f)
+					{
+						calculateGradient(
+							freeGradient,
+							choppedGradient,
+							gradient,
+							mImpulseC,
+							mJ,
+							mB,
+							mD_inv,
+							mLambda,
+							mEta,
+							mCFM,
+							mVelocityConstraints
+						);
+
+
+						mImpulseC.reset();
+						calculateAx(
+							mAg,
+							mImpulseC,
+							mJ,
+							mB,
+							mD_inv,
+							freeGradient,
+							mCFM,
+							mVelocityConstraints
+						); 
+						Real beta = innerDotOfVector(mP, mAg) / innerDotOfVector(mP, mAp);
+						vectorMultiplyScale(deltaArray, mP, -beta);
+						vectorAdd(mP, deltaArray, freeGradient);
+					}
+					else
+					{
+						projectionLambda(
+							mLambda,
+							mVelocityConstraints
+						);
+
+						calculateGradient(
+							freeGradient,
+							choppedGradient,
+							gradient,
+							mImpulseC,
+							mJ,
+							mB,
+							mD_inv,
+							mLambda,
+							mEta,
+							mCFM,
+							mVelocityConstraints
+						);
+						mP.assign(freeGradient);
+					}
+				}
+				else {
 					mImpulseC.reset();
-					calculateLinearSystemLHS(
+					calculateAx(
+						mAg,
+						mImpulseC,
 						mJ,
 						mB,
-						mImpulseC,
-						mLambda,
-						tmpArray,
+						mD_inv,
+						choppedGradient,
 						mCFM,
 						mVelocityConstraints
 					);
 
+					Real alpha_cg = innerDotOfVector(gradient, choppedGradient) / innerDotOfVector(choppedGradient, mAg);
+					vectorMultiplyScale(deltaArray, choppedGradient, -alpha_cg);
+					vectorAdd(mLambda, deltaArray, mLambda);
 
-					vectorSub(
-						mResidual,
-						tmpArray,
+					calculateGradient(
+						freeGradient,
+						choppedGradient,
+						gradient,
+						mImpulseC,
+						mJ,
+						mB,
+						mD_inv,
+						mLambda,
 						mEta,
+						mCFM,
 						mVelocityConstraints
 					);
-
-					mZold.assign(mZ);
-
-					preconditionedResidual(
-						mResidual,
-						mZ,
-						mK_1,
-						mK_2,
-						mK_3,
-						mVelocityConstraints
-					);
-
-					r_norm_new = vectorNorm(mResidual, mZ);
-					float r_norm_true = vectorNorm(mResidual, mResidual);
-					//printf("%lf\n", r_norm_true);
-					if (r_norm_true <= this->varTolerance()->getValue())
-						break;
-
-					float r_norm_spec = vectorNorm(mResidual, mZold);
-
-					// compute p = r + (r_norm_new / r_norm_old) * p
-					Real r_tmp = r_norm_new - r_norm_spec < 0 ? 0 : r_norm_new - r_norm_spec;
-					vectorMultiplyScale(
-						tmpArray,
-						mP,
-						(r_tmp / r_norm_old),
-						mVelocityConstraints
-					);
-					vectorAdd(
-						mP,
-						tmpArray,
-						mZ,
-						mVelocityConstraints);
-					r_norm_old = r_norm_new;
-				}
-
-				mImpulseC.reset();
-				calculateImpulseByLambda(
-					mLambda,
-					mVelocityConstraints,
-					mImpulseC,
-					mB
-				);
-
-				if (this->varFrictionEnabled()->getValue())
-				{
-					mLambdaOldJoint.assign(mLambda, constraint_size - 3 * contact_size, 0, 3 * contact_size);
-				}
-				else
-				{
-					mLambdaOldJoint.assign(mLambda, constraint_size - contact_size, 0, contact_size);
+					mP.assign(freeGradient);
 				}
 			}
 			
-			for (int i = 0; i < this->varIterationNumberForVelocitySolverJacobi()->getValue(); i++)
-			{
-				JacobiIterationForCFM(
-					mLambda,
-					mImpulseC,
-					mJ,
-					mB,
-					mEta,
-					mVelocityConstraints,
-					mContactNumber,
-					mK_1,
-					mK_2,
-					mK_3,
-					this->inMass()->getData(),
-					mCFM,
-					this->varFrictionCoefficient()->getData(),
-					this->varGravityValue()->getData(),
-					dt
-				);
-			}
-
+			mImpulseC.reset();
+			calculateImpulse(
+				mImpulseC,
+				mLambda,
+				mD_inv,
+				mB,
+				mVelocityConstraints
+			);
+			
+			
  
 			updateVelocity(
+				this->inFixedTag()->getData(),
 				this->inVelocity()->getData(),
 				this->inAngularVelocity()->getData(),
 				mImpulseC,
@@ -564,8 +516,6 @@ namespace dyno
 				dt
 			);
 		}
-
-
 	}
 
 	DEFINE_CLASS(PCGConstraintSolver);

@@ -109,6 +109,8 @@ namespace dyno
 		Vec3f center;
 
 		Quat1f rot;
+
+		Real mass;
 	};
 
 	template<typename Real>
@@ -229,6 +231,7 @@ namespace dyno
 			Mat3f rotMat2 = this->actor2->rot.toMatrix3x3();
 			this->r1 = rotMat1.inverse() * (anchor_point - this->actor1->center);
 			this->r2 = rotMat2.inverse() * (anchor_point - this->actor2->center);
+			this->q_init = this->actor2->rot.inverse() * this->actor1->rot;
 		}
 
 		void setAxis(Vector<Real, 3> axis)
@@ -263,6 +266,7 @@ namespace dyno
 		Vector<Real, 3> r2;
 		// slider axis in body1 local space
 		Vector<Real, 3> sliderAxis;
+		Quat1f q_init;
 	};
 
 
@@ -385,11 +389,20 @@ namespace dyno
 			Mat3f rotMat1 = this->actor1->rot.toMatrix3x3();
 			this->r1 = rotMat1.inverse() * (anchor_point - this->actor1->center);
 			this->w = anchor_point;
+
 			if (this->bodyId2 != INVALID)
 			{
 				Mat3f rotMat2 = this->actor2->rot.toMatrix3x3();
 				this->r2 = rotMat2.inverse() * (anchor_point - this->actor2->center);
+				this->q_init = this->actor2->rot.inverse() * this->actor1->rot;
 			}
+
+			else
+			{
+				this->q_init = this->actor1->rot;
+			}
+
+			
 		}
 
 	public:
@@ -397,6 +410,7 @@ namespace dyno
 		Vector<Real, 3> r1;
 		Vector<Real, 3> r2;
 		Vector<Real, 3> w;
+		Quat1f q_init;
 	};
 
 

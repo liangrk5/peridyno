@@ -72,6 +72,8 @@ namespace dyno
 		DYN_FUNC Real angle() const;                                         // return the angle between this quat and the identity quaternion.
 		DYN_FUNC Real angle(const Quat<Real>&) const;						// return the angle between this and the argument
 		DYN_FUNC Quat<Real> conjugate() const;									// return the conjugate
+		DYN_FUNC Mat4f toQuatRightMultiply() const;
+		DYN_FUNC Mat4f toQuatLeftMultiply() const;
 
 		/**
 		 * @brief Rotate a vector by the quaternion,

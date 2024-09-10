@@ -273,6 +273,18 @@ namespace dyno
 	}
 
 	template <typename Real>
+	DYN_FUNC Mat4f Quat<Real>::toQuatRightMultiply() const
+	{
+		return Mat4f(w, -x, -y, -z, x, w, z, -y, y, -z, w, x, z, y, -x, w);
+	}
+
+	template <typename Real>
+	DYN_FUNC Mat4f Quat<Real>::toQuatLeftMultiply() const
+	{
+		return Mat4f(w, -x, -y, -z, x, w, -z, y, y, z, w, -x, z, -y, x, w);
+	}
+
+	template <typename Real>
 	DYN_FUNC SquareMatrix<Real, 4> Quat<Real>::toMatrix4x4() const
 	{
 		Real x2 = x + x, y2 = y + y, z2 = z + z;

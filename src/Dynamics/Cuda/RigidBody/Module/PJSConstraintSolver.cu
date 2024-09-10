@@ -1,7 +1,7 @@
 #include "PJSConstraintSolver.h"
 #include "SharedFuncsForRigidBody.h"
-//#define USE_RELAXATION
-#define FILE_NAME "D:/Work Code/peridyno/Data/v2.txt"
+//#define FIXEDQUAT
+
 namespace dyno
 {
 	IMPLEMENT_TCLASS(PJSConstraintSolver, TDataType)
@@ -153,6 +153,7 @@ namespace dyno
 				mVelocityConstraints,
 				joints,
 				this->inRotationMatrix()->getData(),
+				this->inQuaternion()->getData(),
 				begin_index
 			);
 		}
@@ -369,6 +370,7 @@ namespace dyno
 				mVelocityConstraints,
 				joints,
 				this->inRotationMatrix()->getData(),
+				this->inQuaternion()->getData(),
 				begin_index
 			);
 		}
@@ -426,6 +428,7 @@ namespace dyno
 
 		mErrors.resize(constraint_size);
 		mErrors.reset();
+
 
 		calculateEtaVectorForPJSBaumgarte(
 			mEta,
@@ -486,6 +489,7 @@ namespace dyno
 
 
 		updateVelocity(
+			this->inFixedTag()->getData(),
 			this->inVelocity()->getData(),
 			this->inAngularVelocity()->getData(),
 			mImpulseExt,
@@ -498,7 +502,7 @@ namespace dyno
 		{
 			int contact_size = this->inContacts()->size();
 			initializeJacobian(dt);
-			errors.push_back(checkOutErrors(mErrors));
+			
 			int constraint_size = mVelocityConstraints.size();
 
 
@@ -523,17 +527,10 @@ namespace dyno
 				);
 			}
 
-			Real norm = checkOutError(
-				mJ,
-				mImpulseC,
-				mVelocityConstraints,
-				mEta
-			);
 
-			
-			errors.push_back(norm);
 
 			updateVelocity(
+				this->inFixedTag()->getData(),
 				this->inVelocity()->getData(),
 				this->inAngularVelocity()->getData(),
 				mImpulseC,

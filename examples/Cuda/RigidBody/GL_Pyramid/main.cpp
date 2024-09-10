@@ -30,10 +30,10 @@ std::shared_ptr<SceneGraph> creatBricks()
 	int N = 8;
 	for (int i = N; i >= 0; i--) {
 		for (int j = 0; j < i + 1; j++) {
-			box.center = 5.0f * Vec3f(0.5f, 0.065 + 0.15f * (N - i), 0.12f + 0.2f * j + 0.1f * (N - i));
-			box.halfLength = 5.0f * Vec3f(0.065f, 0.065f, 0.1f);
+			box.center = 5 * Vec3f(0.5f, 0.065 + 0.15f * (N - i), 0.12f + 0.2f * j + 0.1f * (N - i));
+			box.halfLength = 5 * Vec3f(0.065f, 0.065f, 0.1f);
 			if(i == 0)
-				auto boxAt = rigid->addBox(box, rigidBody, 10000);
+				auto boxAt = rigid->addBox(box, rigidBody, 100000);
 			else
 				auto boxAt = rigid->addBox(box, rigidBody);
 		}

@@ -21,6 +21,8 @@
 
 #include "Topology/DiscreteElements.h"
 
+#include "Collision/Attribute.h"
+
 namespace dyno
 {
 	template<typename TDataType>
@@ -56,7 +58,7 @@ namespace dyno
 
 		DEF_VAR(Real, Slop, 0.0001, "");
 
-		DEF_VAR(Real, BaumgarteRate, 0.2, "");
+		DEF_VAR(Real, BaumgarteRate, 0.5, "");
 
 		DEF_VAR(uint, IterationNumberForVelocitySolver, 300, "");
 
@@ -84,6 +86,8 @@ namespace dyno
 		DEF_ARRAY_IN(TQuat, Quaternion, DeviceType::GPU, "Quaternion");
 
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
+
+		DEF_ARRAY_IN(int, FixedTag, DeviceType::GPU, "Fixed Body Tag");
 
 		DEF_INSTANCE_IN(DiscreteElements<TDataType>, DiscreteElements, "");
 

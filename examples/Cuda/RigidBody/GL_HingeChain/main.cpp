@@ -31,7 +31,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 	SphereInfo sphere;
 	sphere.center = scale * Vec3f(-4.6, 20, 0.5);
 	sphere.radius = scale * 2.5;
-	//auto sphereActor = rigid->addSphere(sphere, rigidBody, 0.001);
+	//auto sphereActor = rigid->addSphere(sphere, rigidBody, 10);
 	BoxInfo newbox, oldbox;
 	oldbox.center = scale * Vec3f(-2.0, 20, 0.5);
 	oldbox.halfLength = scale * Vec3f(0.05, 0.09, 0.02);
@@ -47,7 +47,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 	{
 		newbox.center = oldbox.center + scale * Vec3f(0.2, 0, 0);
 		newbox.halfLength = oldbox.halfLength;
-		newbox.rot = Quat1f(M_PI / 2, Vec3f(0, 0, 1));
+		newbox.rot = /*Quat1f(3 * (i + 1), Vec3f(1, 0, 0)) */ Quat1f(M_PI / 2, Vec3f(0, 0, 1));
 		auto newBoxActor = rigid->addBox(newbox, rigidBody);
 		auto& hingeJoint = rigid->createHingeJoint(oldBoxActor, newBoxActor);
 		hingeJoint.setAnchorPoint((oldbox.center + newbox.center) / 2);

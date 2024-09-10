@@ -52,10 +52,10 @@ namespace dyno
 
 		auto merge = std::make_shared<ContactsUnion<TDataType>>();
 		elementQuery->outContacts()->connect(merge->inContactsA());
-		cdBV->outContacts()->connect(merge->inContactsB());
+		//cdBV->outContacts()->connect(merge->inContactsB());
 		this->animationPipeline()->pushModule(merge);
 
-		auto iterSolver = std::make_shared<PCGConstraintSolver<TDataType>>();
+		auto iterSolver = std::make_shared<PJSConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(iterSolver->inTimeStep());
 		this->varFrictionEnabled()->connect(iterSolver->varFrictionEnabled());
 		this->varGravityEnabled()->connect(iterSolver->varGravityEnabled());
@@ -71,7 +71,7 @@ namespace dyno
 		this->stateInertia()->connect(iterSolver->inInertia());
 		this->stateQuaternion()->connect(iterSolver->inQuaternion());
 		this->stateInitialInertia()->connect(iterSolver->inInitialInertia());
-
+		this->stateFixedTag()->connect(iterSolver->inFixedTag());
 		this->stateTopology()->connect(iterSolver->inDiscreteElements());
 
 		merge->outContacts()->connect(iterSolver->inContacts());

@@ -21,6 +21,8 @@
 
 #include "Topology/DiscreteElements.h"
 
+#include "Collision/Attribute.h"
+
 namespace dyno
 {
 	template<typename TDataType>
@@ -86,6 +88,8 @@ namespace dyno
 		DEF_ARRAY_IN(TQuat, Quaternion, DeviceType::GPU, "Quaternion");
 
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
+
+		DEF_ARRAY_IN(int, FixedTag, DeviceType::GPU, "Fixed Body Tag");
 
 		DEF_INSTANCE_IN(DiscreteElements<TDataType>, DiscreteElements, "");
 

@@ -124,6 +124,13 @@ namespace dyno
 			return mHostJointsFixed[mHostJointsFixed.size() - 1];
 		}
 
+		void createUnilateralFixedJointStable(
+			std::shared_ptr<PdActor> actor1
+		)
+		{
+			mFixedRigids.push_back(actor1);
+		}
+
 		PointJoint& createPointJoint(
 			std::shared_ptr<PdActor> actor1)
 		{
@@ -134,6 +141,8 @@ namespace dyno
 		}
 
 		Mat3f pointInertia(Coord v1);
+
+		void calculateTag(ElementOffset& offset);
 
 	protected:
 		void resetStates() override;
@@ -193,6 +202,8 @@ namespace dyno
 
 		DEF_ARRAY_STATE(Matrix, InitialInertia, DeviceType::GPU, "Initial inertia matrix");
 
+		DEF_ARRAY_STATE(int, FixedTag, DeviceType::GPU, "Fixed Body Tag");
+
 	private:
 		std::vector<RigidBodyInfo> mHostRigidBodyStates;
 
@@ -213,6 +224,8 @@ namespace dyno
 		std::vector<HingeJoint> mHostJointsHinge;
 		std::vector<FixedJoint> mHostJointsFixed;
 		std::vector<PointJoint> mHostJointsPoint;
+		std::vector<int> mHostTag;
+		std::vector<std::shared_ptr<PdActor>> mFixedRigids;
 
 	public:
 		int m_numOfSamples;
