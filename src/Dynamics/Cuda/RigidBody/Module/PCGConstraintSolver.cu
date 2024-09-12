@@ -255,12 +255,6 @@ namespace dyno
 			dt
 		);
 
-		calculateDiagnalsInv(
-			mD_inv,
-			mJ,
-			mB,
-			mCFM
-		);
 
 		calculateEtaVectorWithERP(
 			mEta,
@@ -281,6 +275,15 @@ namespace dyno
 				this->inContacts()->getData(),
 				mContactNumber);
 		}
+
+		calculateDiagnalsInv(
+			mD_inv,
+			mJ,
+			mB,
+			mCFM,
+			mContactNumber,
+			mVelocityConstraints
+		);
 	}
 
 
@@ -325,7 +328,7 @@ namespace dyno
 			int constraint_size = mVelocityConstraints.size();
 			int contact_size = this->inContacts()->size();
 
-			initLambda(0.1, mLambda);
+			initLambda(0, mLambda);
 			// MPRGP
 			calculateGradient(
 				freeGradient,
@@ -342,13 +345,18 @@ namespace dyno
 			);
 
 			mP.assign(freeGradient);
+			Real init_norm;
 
 			for (int i = 0; i < this->varIterationNumberForVelocitySolverCG()->getValue(); i++)
 			{
 				vectorAdd(projectionGradient, freeGradient, choppedGradient);
 				Real norm = sqrt(innerDotOfVector(projectionGradient, projectionGradient));
-				printf("%lf\n", norm);
-				if (norm <= 1e-4)
+				if (i == 0)
+				{
+					init_norm = norm;
+				}
+
+				if (norm <= 1e-4 * init_norm)
 					break;
 				Real gc_norm = innerDotOfVector(choppedGradient, choppedGradient);
 				Real gf_norm = innerDotOfVector(freeGradient, freeGradient);

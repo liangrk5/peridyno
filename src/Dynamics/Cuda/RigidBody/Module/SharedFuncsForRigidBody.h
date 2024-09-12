@@ -13,6 +13,10 @@
 
 #include "Collision/Attribute.h"
 
+#include <algorithm>
+#include <random>
+
+
 namespace dyno 
 {
 	void ApplyTransform(
@@ -179,6 +183,15 @@ namespace dyno
 		DArray<Mat3f> rotMat,
 		bool hasFriction
 	);
+
+	void setUpContactAndFrictionConstraintsShuffle(
+		DArray<TConstraintPair<float>> constraints,
+		DArray<TContactPair<float>> contactsInLocalFrame,
+		DArray<Vec3f> pos,
+		DArray<Mat3f> rotMat,
+		DArray<int> arr,
+		bool hasFriction
+	);
 	
 	void setUpContactConstraints(
 		DArray<TConstraintPair<float>> constraints,
@@ -278,6 +291,24 @@ namespace dyno
 		float dt
 	);
 
+	void JacobiIterationShuffle(
+		DArray<float> lambda,
+		DArray<Vec3f> impulse,
+		DArray<Vec3f> J,
+		DArray<Vec3f> B,
+		DArray<float> eta,
+		DArray<TConstraintPair<float>> constraints,
+		DArray<int> nbq,
+		DArray<float> K_1,
+		DArray<Mat2f> K_2,
+		DArray<Mat3f> K_3,
+		DArray<float> mass,
+		DArray<int> tag,
+		float mu,
+		float g,
+		float dt
+	);
+
 	void JacobiIterationForCFM(
 		DArray<float> lambda,
 		DArray<Vec3f> impulse,
@@ -341,10 +372,12 @@ namespace dyno
 	);
 
 	void calculateDiagnalsInv(
-		DArray<float> d_inv,
-		DArray<Vec3f> J,
-		DArray<Vec3f> B,
-		DArray<Real> CFM
+		DArray<float>& d_inv,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B,
+		DArray<float>& CFM,
+		DArray<int>& nbq,
+		DArray<TConstraintPair<float>>& constraints
 	);
 
 	void preConditionJ(
@@ -457,4 +490,8 @@ namespace dyno
 		float initValue,
 		DArray<float>& lambda
 	);
+
+	std::vector<int> generatePermutation(int n);
+
+	void generatePermutationDArray(DArray<int> arr);
 }

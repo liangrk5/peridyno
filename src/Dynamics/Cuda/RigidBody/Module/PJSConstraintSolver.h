@@ -60,7 +60,7 @@ namespace dyno
 
 		DEF_VAR(Real, BaumgarteRate, 0.5, "");
 
-		DEF_VAR(uint, IterationNumberForVelocitySolver, 300, "");
+		DEF_VAR(uint, IterationNumberForVelocitySolver, 30, "");
 
 		DEF_VAR(Real, LinearDamping, 0.1, "");
 
@@ -124,6 +124,8 @@ namespace dyno
 
 		DArray<Real> mErrors;
 		DArray<Real> mA;
+
+		DArray<int> mArr;
 
 	};
 }

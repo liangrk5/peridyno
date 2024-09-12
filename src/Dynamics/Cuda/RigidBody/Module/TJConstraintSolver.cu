@@ -269,6 +269,7 @@ namespace dyno
 				this->inCenter()->getData(),
 				this->inRotationMatrix()->getData()
 			);
+			int contact_size = this->inContacts()->size();
 
 			Real dh = dt / this->varSubStepping()->getValue();
 

@@ -24,6 +24,10 @@ namespace dyno
 		int constraint_size = 0;
 		int contact_size = this->inContacts()->size();
 
+		mArr.resize(contact_size);
+
+		generatePermutationDArray(mArr);
+
 		auto topo = this->inDiscreteElements()->constDataPtr();
 
 		int ballAndSocketJoint_size = topo->ballAndSocketJoints().size();
@@ -76,11 +80,12 @@ namespace dyno
 		if (contact_size != 0)
 		{
 			auto& contacts = this->inContacts()->getData();
-			setUpContactAndFrictionConstraints(
+			setUpContactAndFrictionConstraintsShuffle(
 				mVelocityConstraints,
 				mContactsInLocalFrame,
 				this->inCenter()->getData(),
 				this->inRotationMatrix()->getData(),
+				mArr,
 				this->varFrictionEnabled()->getData()
 			);
 		}
@@ -231,6 +236,10 @@ namespace dyno
 		int contact_size = this->inContacts()->size();
 
 		auto topo = this->inDiscreteElements()->constDataPtr();
+
+		mArr.resize(3 * contact_size);
+
+		generatePermutationDArray(mArr);
 
 		int ballAndSocketJoint_size = topo->ballAndSocketJoints().size();
 		int sliderJoint_size = topo->sliderJoints().size();

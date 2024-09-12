@@ -62,7 +62,7 @@ namespace dyno
 
 		DEF_VAR(Real, DampingRatio, 1.0, "");
 
-		DEF_VAR(uint, IterationNumberForVelocitySolverCG, 100, "");
+		DEF_VAR(uint, IterationNumberForVelocitySolverCG, 30, "");
 
 		DEF_VAR(uint, IterationNumberForVelocitySolverJacobi, 0, "");
 

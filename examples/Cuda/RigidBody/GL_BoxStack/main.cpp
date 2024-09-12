@@ -23,7 +23,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 	std::shared_ptr<SceneGraph> scn = std::make_shared<SceneGraph>();
 
 	auto rigid = scn->addNode(std::make_shared<RigidBodySystem<DataType3f>>());
-	uint dim = 6;
+	uint dim = 5;
 	float h = 0.1f;
 
 	RigidBodyInfo rigidBody;
@@ -37,7 +37,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 			{
 				box.center = Vec3f(2 * i * h - h * dim, h + (2.1f) * j * h, 2 * k * h - h * dim);
 				box.halfLength = Vec3f(h, h, h);
-				auto boxAt = rigid->addBox(box, rigidBody, 1);
+				auto boxAt = rigid->addBox(box, rigidBody, 10);
 			}
 		}
 	}

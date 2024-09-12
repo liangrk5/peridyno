@@ -456,7 +456,7 @@ namespace dyno
 				this->inRotationMatrix()->getData()
 			);
 		}
-
+		int contact_size = this->inContacts()->size();
 		//Velocity Solver
 		if (!this->inContacts()->isEmpty() || topo->totalJointSize() > 0)
 		{
