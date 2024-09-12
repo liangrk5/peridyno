@@ -20,8 +20,8 @@
 #include <GLSurfaceVisualModule.h>
 #include <GLInstanceVisualModule.h>
 
-#include "PlaneModel.h"
-#include "SphereModel.h"
+#include "BasicShapes/PlaneModel.h"
+#include "BasicShapes/SphereModel.h"
 
 #include "initializeModeling.h"
 #include "ParticleSystem/initializeParticleSystem.h"
@@ -61,7 +61,7 @@ std::shared_ptr<SceneGraph> createScene()
 	fluid->graphicsPipeline()->pushModule(colorMapper);
 	fluid->graphicsPipeline()->pushModule(ptRender);
 
-	fluid->animationPipeline()->disable();
+	fluid->setActive(false);
 
 	//Setup boundaries
 	auto plane = scn->addNode(std::make_shared<PlaneModel<DataType3f>>());

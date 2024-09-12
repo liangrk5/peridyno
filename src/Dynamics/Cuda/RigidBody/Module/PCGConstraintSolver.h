@@ -20,7 +20,6 @@
 #include "Module/ConstraintModule.h"
 #include "RigidBody/RigidBodyShared.h"
 #include "Topology/DiscreteElements.h"
-#include "Collision/Attribute.h"
 
 namespace dyno
 {
@@ -93,8 +92,6 @@ namespace dyno
 
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
 
-		DEF_ARRAY_IN(int, FixedTag, DeviceType::GPU, "Fixed Body Tag");
-
 		DEF_INSTANCE_IN(DiscreteElements<TDataType>, DiscreteElements, "");
 	
 	protected:
@@ -112,29 +109,38 @@ namespace dyno
 
 		DArray<Real> mEta;
 		DArray<Real> mLambda;
+		DArray<Real> mLambdaOldJoint;
 
 
 		DArray<ContactPair> mContactsInLocalFrame;
 		DArray<Constraint> mVelocityConstraints;
 
-		DArray<Real> gradient;
-		DArray<Real> freeGradient;
-		DArray<Real> reducedGradient;
-		DArray<Real> choppedGradient;
-		DArray<Real> projectionGradient;
+		DArray<Real> mResidualOld;
+		DArray<Real> mResidual;
+		DArray<Real> tmpArray;
 		DArray<Real> mP;
 		DArray<Real> mAp;
-		DArray<Real> mAg;
-		DArray<Real> deltaArray;
+		
+		int cnt = 0;
+		DArray<Real> mErrors;
+
+		std::vector<float> residuals;
 
 
 		DArray<int> mContactNumber;
 
+		DArray<Real> mK_1;
+		DArray<Mat2f> mK_2;
+		DArray<Matrix> mK_3;
+
+		DArray<Real> mA;
+		DArray<Real> mZ;
+		DArray<Real> mZold;
 
 		DArray<Real> mCFM;
 		DArray<Real> mERP;
-		DArray<Real> mD;
-		DArray<Real> mD_inv;
+
+		int mJointSize = -1;
 		
 	};
 }
