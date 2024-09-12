@@ -8,7 +8,6 @@
 #include "Module/PJSNJSConstraintSolver.h"
 #include "Module/PJSoftConstraintSolver.h"
 #include "Module/PJSConstraintSolver.h"
-#include "Module/PCGConstraintSolver.h"
 #include "Module/CarDriver.h"
 
 #include "Collision/NeighborElementQuery.h"

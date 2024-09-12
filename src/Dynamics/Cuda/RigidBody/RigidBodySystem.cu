@@ -9,7 +9,6 @@
 #include "RigidBody/Module/PJSNJSConstraintSolver.h"
 #include "RigidBody/Module/PJSConstraintSolver.h"
 #include "RigidBody/Module/PJSoftConstraintSolver.h"
-#include "RigidBody/Module/PCGConstraintSolver.h"
 #include "RigidBody/Module/CarDriver.h"
 
 //Module headers
@@ -45,7 +44,7 @@ namespace dyno
 
 		this->animationPipeline()->pushModule(merge);
 
-		auto iterSolver = std::make_shared<PJSoftConstraintSolver<TDataType>>();
+		auto iterSolver = std::make_shared<PJSConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(iterSolver->inTimeStep());
 		this->varFrictionEnabled()->connect(iterSolver->varFrictionEnabled());
 		this->varGravityEnabled()->connect(iterSolver->varGravityEnabled());
