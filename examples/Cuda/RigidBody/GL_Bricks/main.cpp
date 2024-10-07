@@ -31,7 +31,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 		{
 			box.center = 0.5f * Vec3f(0.5f, 1.1 - 0.13 * i, 0.12f + 0.2 * j + 0.1 * (8 - i));
 			box.halfLength = 0.5f * Vec3f(0.065, 0.065, 0.1);
-			auto boxAt = rigid->addBox(box, rigidBody);
+			auto boxAt = rigid->addBox(box, rigidBody, 100);
 		}
 
 
@@ -66,8 +66,8 @@ std::shared_ptr<SceneGraph> creatBricks()
 	rigid->graphicsPipeline()->pushModule(mapper);
 
 	auto sRender = std::make_shared<GLSurfaceVisualModule>();
-	sRender->setColor(Color(1, 1, 0));
-	sRender->setAlpha(0.5f);
+	sRender->setColor(Color::SteelBlue2());
+	sRender->setAlpha(1.0f);
 	mapper->outTriangleSet()->connect(sRender->inTriangleSet());
 	rigid->graphicsPipeline()->pushModule(sRender);
 
@@ -84,8 +84,8 @@ std::shared_ptr<SceneGraph> creatBricks()
 	rigid->graphicsPipeline()->pushModule(contactMapper);
 
 	auto wireRender = std::make_shared<GLWireframeVisualModule>();
-	wireRender->setColor(Color(0, 0, 1));
-	contactMapper->outEdgeSet()->connect(wireRender->inEdgeSet());
+	wireRender->setColor(Color(0, 0, 0));
+	mapper->outTriangleSet()->connect(wireRender->inEdgeSet());
 	rigid->graphicsPipeline()->pushModule(wireRender);
 
 	//Visualize contact points

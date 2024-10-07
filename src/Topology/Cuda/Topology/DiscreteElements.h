@@ -141,6 +141,12 @@ namespace dyno
 			this->actor2 = a2;
 		}
 
+		void setMaxForceAndTorque(Real maxForce, Real maxTorque)
+		{
+			this->maxForce = maxForce;
+			this->maxTorque = maxTorque;
+		}
+
 	public:
 		int bodyId1;
 		int bodyId2;
@@ -151,6 +157,10 @@ namespace dyno
 		//The following two pointers should only be visited from host codes.
 		PdActor* actor1 = nullptr;
 		PdActor* actor2 = nullptr;
+
+		Real maxForce = FLT_MAX;
+		Real maxTorque = FLT_MAX;
+		bool isDamaged;
 	};
 
 
@@ -180,6 +190,8 @@ namespace dyno
 
 			this->actor1 = a1;
 			this->actor2 = a2;
+
+			this->isDamaged = false;
 		}
 
 		void setAnchorPoint(Vector<Real, 3>anchor_point)
@@ -195,6 +207,7 @@ namespace dyno
 		Vector<Real, 3> r1;
 		// anchor point in body2 local space
 		Vector<Real, 3> r2;
+
 	};
 
 	template<typename Real>
@@ -211,6 +224,7 @@ namespace dyno
 
 			this->actor1 = nullptr;
 			this->actor2 = nullptr;
+
 		}
 
 		CPU_FUNC SliderJoint(PdActor* a1, PdActor* a2)
@@ -223,6 +237,8 @@ namespace dyno
 
 			this->actor1 = a1;
 			this->actor2 = a2;
+
+			this->isDamaged = false;
 		}
 
 		void setAnchorPoint(Vector<Real, 3>anchor_point)
@@ -296,6 +312,8 @@ namespace dyno
 
 			this->actor1 = a1;
 			this->actor2 = a2;
+
+			this->isDamaged = false;
 		}
 
 		void setAnchorPoint(Vector<Real, 3>anchor_point)
@@ -370,6 +388,8 @@ namespace dyno
 
 			this->actor1 = a1;
 			this->actor2 = a2;
+
+			this->isDamaged = false;
 		}
 
 		CPU_FUNC FixedJoint(PdActor* a1)
@@ -401,8 +421,6 @@ namespace dyno
 			{
 				this->q_init = this->actor1->rot;
 			}
-
-			
 		}
 
 	public:
@@ -411,6 +429,7 @@ namespace dyno
 		Vector<Real, 3> r2;
 		Vector<Real, 3> w;
 		Quat1f q_init;
+		
 	};
 
 
@@ -439,6 +458,8 @@ namespace dyno
 
 			this->actor1 = a1;
 			this->actor2 = nullptr;
+
+			this->isDamaged = false;
 		}
 		void setAnchorPoint(Vector<Real, 3> point)
 		{

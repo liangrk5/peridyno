@@ -58,13 +58,13 @@ namespace dyno
 
 		DEF_VAR(Real, Slop, 0.0001, "");
 
-		DEF_VAR(Real, BaumgarteRate, 0.5, "");
+		DEF_VAR(Real, BaumgarteRate, 0.8, "");
 
-		DEF_VAR(uint, IterationNumberForVelocitySolver, 30, "");
+		DEF_VAR(uint, IterationNumberForVelocitySolver, 300, "");
 
-		DEF_VAR(Real, LinearDamping, 0.1, "");
+		DEF_VAR(Real, LinearDamping, 0, "");
 
-		DEF_VAR(Real, AngularDamping, 0.1, "");
+		DEF_VAR(Real, AngularDamping, 0, "");
 
 	public:
 		DEF_VAR_IN(Real, TimeStep, "Time step size");
@@ -126,6 +126,10 @@ namespace dyno
 		DArray<Real> mA;
 
 		DArray<int> mArr;
+
+		Real cvalue;
+
+		DArray<float> Ax;
 
 	};
 }

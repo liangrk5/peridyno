@@ -9,6 +9,7 @@
 #include "RigidBody/Module/PJSNJSConstraintSolver.h"
 #include "RigidBody/Module/PJSConstraintSolver.h"
 #include "RigidBody/Module/PJSoftConstraintSolver.h"
+#include "RigidBody/Module/PCGConstraintSolver.h"
 #include "RigidBody/Module/CarDriver.h"
 
 //Module headers
@@ -32,7 +33,7 @@ namespace dyno
 		this->stateCollisionMask()->connect(elementQuery->inCollisionMask());
 		this->stateAttribute()->connect(elementQuery->inAttribute());
 		this->animationPipeline()->pushModule(elementQuery);
-		elementQuery->varSelfCollision()->setValue(false);
+		//elementQuery->varSelfCollision()->setValue(false);
 
 		auto cdBV = std::make_shared<CollistionDetectionBoundingBox<TDataType>>();
 		this->stateTopology()->connect(cdBV->inDiscreteElements());
@@ -44,13 +45,14 @@ namespace dyno
 
 		this->animationPipeline()->pushModule(merge);
 
-		auto iterSolver = std::make_shared<PJSConstraintSolver<TDataType>>();
+		auto iterSolver = std::make_shared<PJSoftConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(iterSolver->inTimeStep());
 		this->varFrictionEnabled()->connect(iterSolver->varFrictionEnabled());
 		this->varGravityEnabled()->connect(iterSolver->varGravityEnabled());
 		this->varGravityValue()->connect(iterSolver->varGravityValue());
 		this->varFrictionCoefficient()->connect(iterSolver->varFrictionCoefficient());
 		this->varSlop()->connect(iterSolver->varSlop());
+		this->varFractureEnabled()->connect(iterSolver->varFractureEnabled());
 		this->stateMass()->connect(iterSolver->inMass());
 		
 		this->stateCenter()->connect(iterSolver->inCenter());
@@ -66,7 +68,7 @@ namespace dyno
 		this->animationPipeline()->pushModule(iterSolver);
 
 
-		this->setDt(0.016f);
+		this->setDt(0.005f);
 	}
 
 	template<typename TDataType>

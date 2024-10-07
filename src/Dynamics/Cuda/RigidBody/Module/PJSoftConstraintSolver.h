@@ -47,6 +47,8 @@ namespace dyno
 		~PJSoftConstraintSolver();
 
 	public:
+		DEF_VAR(bool, FractureEnabled, true, "");
+
 		DEF_VAR(bool, FrictionEnabled, true, "");
 
 		DEF_VAR(bool, GravityEnabled, true, "");
@@ -59,9 +61,9 @@ namespace dyno
 
 		DEF_VAR(uint, IterationNumberForVelocitySolver, 300, "");
 
-		DEF_VAR(Real, LinearDamping, 0.1, "");
+		DEF_VAR(Real, LinearDamping, 0.05, "");
 
-		DEF_VAR(Real, AngularDamping, 0.1, "");
+		DEF_VAR(Real, AngularDamping, 0.05, "");
 
 		DEF_VAR(Real, DampingRatio, 1.0, "");
 
@@ -98,6 +100,7 @@ namespace dyno
 
 	private:
 		void initializeJacobian(Real dt);
+		void damgedJoints(Real dt);
 
 	private:
 		DArray<Coord> mJ;

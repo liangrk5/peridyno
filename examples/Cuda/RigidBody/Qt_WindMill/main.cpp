@@ -16,7 +16,7 @@
 #include "Collision/NeighborElementQuery.h"
 #include <Module/GLPhotorealisticInstanceRender.h>
 
-#include <PlaneModel.h>
+
 #include <map>
 
 #include "GltfLoader.h"
@@ -81,8 +81,8 @@ std::shared_ptr<SceneGraph> creatBricks()
 	joint.setMoter(2);
 
 
-	JointBody->createUnilateralFixedJoint(Actors[4]);
-	
+	auto& joint2 = JointBody->createUnilateralFixedJoint(Actors[4]);
+	joint2.setAnchorPoint(Actors[4]->center);
 	/*auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
 	JointBody->stateTopology()->connect(mapper->inDiscreteElements());
 	JointBody->graphicsPipeline()->pushModule(mapper);
@@ -103,7 +103,7 @@ int main()
 	app.setSceneGraph(creatBricks());
 	app.initialize(1280, 768);
 	//Set the eye position for the camera
-	app.renderWindow()->getCamera()->setEyePos(Vec3f(0.81f, 1.36f, 3.23));
+	app.renderWindow()->getCamera()->setEyePos(Vec3f(0.98f, 1.37f, 3.18));
 
 	//Set the target position for the camera
 	app.renderWindow()->getCamera()->setTargetPos(Vec3f(0, 0, 0));

@@ -37,7 +37,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 			{
 				box.center = Vec3f(2 * i * h - h * dim, h + (2.1f) * j * h, 2 * k * h - h * dim);
 				box.halfLength = Vec3f(h, h, h);
-				auto boxAt = rigid->addBox(box, rigidBody, 10);
+				auto boxAt = rigid->addBox(box, rigidBody, 1);
 			}
 		}
 	}
@@ -66,6 +66,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 
 	auto wireRender = std::make_shared<GLWireframeVisualModule>();
 	wireRender->setColor(Color(0, 0, 0));
+	wireRender->varRadius()->setValue(0.01);
 	mapper->outTriangleSet()->connect(wireRender->inEdgeSet());
 	rigid->graphicsPipeline()->pushModule(wireRender);
 
@@ -88,6 +89,10 @@ int main()
 	GlfwApp app;
 	app.setSceneGraph(creatBricks());
 	app.initialize(1280, 768);
+	app.renderWindow()->getCamera()->setEyePos(Vec3f(1.65f, 2.52f, 1.87f));
+
+	//Set the target position for the camera
+	app.renderWindow()->getCamera()->setTargetPos(Vec3f(0, 0, 0));
 	app.mainLoop();
 
 	return 0;

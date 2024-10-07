@@ -56,22 +56,22 @@ namespace dyno
 		std::shared_ptr<PdActor> addBox(
 			const BoxInfo& box, 
 			const RigidBodyInfo& bodyDef,
-			const Real density = Real(1));
+			const Real density = Real(100));
 
 		std::shared_ptr<PdActor> addSphere(
 			const SphereInfo& sphere,
 			const RigidBodyInfo& bodyDef, 
-			const Real density = Real(1));
+			const Real density = Real(100));
 
 		std::shared_ptr<PdActor> addTet(
 			const TetInfo& tet,
 			const RigidBodyInfo& bodyDef,
-			const Real density = Real(1));
+			const Real density = Real(100));
 
 		std::shared_ptr<PdActor> addCapsule(
 			const CapsuleInfo& capsule,
 			const RigidBodyInfo& bodyDef,
-			const Real density = Real(1));
+			const Real density = Real(100));
 
 
 
@@ -152,6 +152,8 @@ namespace dyno
 		void clearRigidBodySystem();
 
 	public:
+		DEF_VAR(bool, FractureEnabled, true, "");
+
 		DEF_VAR(bool, FrictionEnabled, true, "A toggle to control the friction");
 
 		DEF_VAR(bool, GravityEnabled, true, "A toggle to control the gravity");

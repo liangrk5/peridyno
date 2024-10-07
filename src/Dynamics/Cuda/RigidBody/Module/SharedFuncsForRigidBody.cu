@@ -313,7 +313,7 @@ namespace dyno
 			}
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_1)
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_1 && constraints[tId].isValid)
 		{
 			Coord r1 = constraints[tId].normal1;
 			Coord r2 = constraints[tId].normal2;
@@ -336,7 +336,7 @@ namespace dyno
 			}
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_2)
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_2 && constraints[tId].isValid)
 		{
 			Coord r1 = constraints[tId].normal1;
 			Coord r2 = constraints[tId].normal2;
@@ -358,7 +358,7 @@ namespace dyno
 			}
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_3)
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_3 && constraints[tId].isValid)
 		{
 			Coord r1 = constraints[tId].normal1;
 			Coord r2 = constraints[tId].normal2;
@@ -380,7 +380,7 @@ namespace dyno
 			}	
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_ANCHOR_TRANS_1)
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_TRANS_1 && constraints[tId].isValid)
 		{
 			Coord r1 = constraints[tId].pos1;
 			Coord r2 = constraints[tId].pos2;
@@ -398,7 +398,7 @@ namespace dyno
 			B[4 * tId + 3] = inertia[idx2].inverse() * J[4 * tId + 3];
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_ANCHOR_TRANS_2)
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_TRANS_2 && constraints[tId].isValid)
 		{
 			Coord r1 = constraints[tId].pos1;
 			Coord r2 = constraints[tId].pos2;
@@ -416,7 +416,7 @@ namespace dyno
 			B[4 * tId + 3] = inertia[idx2].inverse() * J[4 * tId + 3];
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_1)
+		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_1 && constraints[tId].isValid)
 		{
 			J[4 * tId] = Coord(0);
 			J[4 * tId + 1] = Coord(-1, 0, 0);
@@ -435,7 +435,7 @@ namespace dyno
 			}
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_2)
+		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_2 && constraints[tId].isValid)
 		{
 			J[4 * tId] = Coord(0);
 			J[4 * tId + 1] = Coord(0, -1, 0);
@@ -454,7 +454,7 @@ namespace dyno
 			}
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_3)
+		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_3 && constraints[tId].isValid)
 		{
 			J[4 * tId] = Coord(0);
 			J[4 * tId + 1] = Coord(0, 0, -1);
@@ -531,7 +531,7 @@ namespace dyno
 			}
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_ALLOW_ROT1D_1)
+		if (constraints[tId].type == ConstraintType::CN_ALLOW_ROT1D_1 && constraints[tId].isValid)
 		{
 			Coord b2 = constraints[tId].pos1;
 			Coord a1 = constraints[tId].axis;
@@ -547,7 +547,7 @@ namespace dyno
 			B[4 * tId + 3] = inertia[idx2].inverse() * J[4 * tId + 3];
 		}
 
-		if (constraints[tId].type == ConstraintType::CN_ALLOW_ROT1D_2)
+		if (constraints[tId].type == ConstraintType::CN_ALLOW_ROT1D_2 && constraints[tId].isValid)
 		{
 			Coord c2 = constraints[tId].pos2;
 			Coord a1 = constraints[tId].axis;
@@ -2093,18 +2093,12 @@ namespace dyno
 				Quat q_init = constraints[tId].rotQuat;
 				Quat q_error = q2 * q_init * q1.inverse();
 
-				if (q_error.w > 0)
-					error = q_error.x * 2;
-				else
-					error = -q_error.x * 2;
+				error = q_error.x * 2;
 			}
 			else
 			{
 				Quat diff = rotation_q[idx1] * constraints[tId].rotQuat.inverse();
-				if (diff.w > 0)
-					error = diff.x * 2;
-				else
-					error = -diff.x * 2;
+				error = -diff.x * 2;
 			}
 		}
 
@@ -2117,18 +2111,12 @@ namespace dyno
 				Quat q_init = constraints[tId].rotQuat;
 				Quat q_error = q2 * q_init * q1.inverse();
 
-				if (q_error.w > 0)
-					error = q_error.y * 2;
-				else
-					error = -q_error.y * 2;
+				error = q_error.y * 2;
 			}
 			else
 			{
 				Quat diff = rotation_q[idx1] * constraints[tId].rotQuat.inverse();
-				if (diff.w > 0)
-					error = diff.y * 2;
-				else
-					error = -diff.y * 2;
+				error = -diff.y * 2;
 			}
 		}
 
@@ -2141,18 +2129,12 @@ namespace dyno
 				Quat q_init = constraints[tId].rotQuat;
 				Quat q_error = q2 * q_init * q1.inverse();
 
-				if (q_error.w > 0)
-					error = q_error.z * 2;
-				else
-					error = -q_error.z * 2;
+				error = q_error.z * 2;
 			}
 			else
 			{
 				Quat diff = rotation_q[idx1] * constraints[tId].rotQuat.inverse();
-				if (diff.w > 0)
-					error = diff.z * 2;
-				else
-					error = -diff.z * 2;
+				error = -diff.z * 2;
 			}
 		}
 
@@ -2836,6 +2818,9 @@ namespace dyno
 		int idx1 = globalC.bodyId1;
 		int idx2 = globalC.bodyId2;
 
+		if (idx1 > idx2 && idx2 != -1)
+			printf("%d %d\n", idx1, idx2);
+
 		Contact localC;
 		localC.bodyId1 = idx1;
 		localC.bodyId2 = idx2;
@@ -3192,6 +3177,9 @@ namespace dyno
 		Coord r1 = rotMat[idx1] * joints[tId].r1;
 		Coord r2 = rotMat[idx2] * joints[tId].r2;
 
+		Real maxForce = joints[tId].maxForce;
+		Real maxTorque = joints[tId].maxTorque;
+
 		int baseIndex = 3 * tId + begin_index;
 
 		constraints[baseIndex].bodyId1 = idx1;
@@ -3200,6 +3188,8 @@ namespace dyno
 		constraints[baseIndex].normal2 = r2;
 		constraints[baseIndex].type = ConstraintType::CN_ANCHOR_EQUAL_1;
 		constraints[baseIndex].isValid = true;
+		constraints[baseIndex].maxForce = maxForce;
+		constraints[baseIndex].maxTorque = maxTorque;
 
 		constraints[baseIndex + 1].bodyId1 = idx1;
 		constraints[baseIndex + 1].bodyId2 = idx2;
@@ -3207,6 +3197,9 @@ namespace dyno
 		constraints[baseIndex + 1].normal2 = r2;
 		constraints[baseIndex + 1].type = ConstraintType::CN_ANCHOR_EQUAL_2;
 		constraints[baseIndex + 1].isValid = true;
+		constraints[baseIndex + 1].maxForce = maxForce;
+		constraints[baseIndex + 1].maxTorque = maxTorque;
+
 
 		constraints[baseIndex + 2].bodyId1 = idx1;
 		constraints[baseIndex + 2].bodyId2 = idx2;
@@ -3214,6 +3207,8 @@ namespace dyno
 		constraints[baseIndex + 2].normal2 = r2;
 		constraints[baseIndex + 2].type = ConstraintType::CN_ANCHOR_EQUAL_3;
 		constraints[baseIndex + 2].isValid = true;
+		constraints[baseIndex + 2].maxForce = maxForce;
+		constraints[baseIndex + 2].maxTorque = maxTorque;
 	}
 
 	void setUpBallAndSocketJointConstraints(
@@ -3261,6 +3256,9 @@ namespace dyno
 
 		int idx1 = joints[tId].bodyId1;
 		int idx2 = joints[tId].bodyId2;
+
+		Real maxForce = joints[tId].maxForce;
+		Real maxTorque = joints[tId].maxTorque;
 
 		Coord r1 = rotMat[idx1] * joints[tId].r1;
 		Coord r2 = rotMat[idx2] * joints[tId].r2;
@@ -3338,6 +3336,8 @@ namespace dyno
 			constraint.d_min = C_min;
 			constraint.d_max = C_max;
 			constraint.rotQuat = joints[tId].q_init;
+			constraint.maxForce = maxForce;
+			constraint.maxTorque = maxTorque;
 		}
 
 		constraints[baseIndex].type = ConstraintType::CN_ANCHOR_TRANS_1;
@@ -3397,6 +3397,9 @@ namespace dyno
 		int idx1 = joints[tId].bodyId1;
 		int idx2 = joints[tId].bodyId2;
 
+		Real maxForce = joints[tId].maxForce;
+		Real maxTorque = joints[tId].maxTorque;
+
 		Matrix rotMat1 = rotMat[idx1];
 		Matrix rotMat2 = rotMat[idx2];
 
@@ -3406,9 +3409,6 @@ namespace dyno
 
 		Coord a1 = rotMat1 * joints[tId].hingeAxisBody1;
 		Coord a2 = rotMat2 * joints[tId].hingeAxisBody2;
-
-
-		
 
 		// two vector orthogonal to the a2
 		Coord b2, c2;
@@ -3486,11 +3486,18 @@ namespace dyno
 			constraints[baseIndex + i].d_min = C_min > 0 ? 0 : C_min;
 			constraints[baseIndex + i].d_max = C_max > 0 ? 0 : C_max;
 			constraints[baseIndex + i].interpenetration = v_moter;
+			constraints[baseIndex + i].maxForce = maxForce;
+			constraints[baseIndex + i].maxTorque = maxTorque;
 		}
 
 		for (int i = 0; i < 5; i++)
 		{
-			constraints[baseIndex + i].isValid = true;
+			constraints[baseIndex + i].isValid = !joints[tId].isDamaged;
+		}
+
+		for (int i = 5; i < 7; i++)
+		{
+			constraints[baseIndex + i].isValid = constraints[baseIndex + i].isValid && (!joints[tId].isDamaged);
 		}
 
 		constraints[baseIndex].type = ConstraintType::CN_ANCHOR_EQUAL_1;
@@ -3547,6 +3554,10 @@ namespace dyno
 
 		int idx1 = joints[tId].bodyId1;
 		int idx2 = joints[tId].bodyId2;
+
+		Real maxForce = joints[tId].maxForce;
+		Real maxTorque = joints[tId].maxTorque;
+
 		Vector<Real, 3> r1 = rotMat[idx1] * joints[tId].r1;
 		Vector<Real, 3> r2;
 		if (idx2 != INVALID)
@@ -3562,8 +3573,10 @@ namespace dyno
 			constraints[baseIndex + i].normal1 = r1;
 			constraints[baseIndex + i].normal2 = r2;
 			constraints[baseIndex + i].pos1 = joints[tId].w;
-			constraints[baseIndex + i].isValid = true;
+			constraints[baseIndex + i].isValid = !joints[tId].isDamaged;
 			constraints[baseIndex + i].rotQuat = joints[tId].q_init;
+			constraints[baseIndex + i].maxForce = maxForce;
+			constraints[baseIndex + i].maxTorque = maxTorque;
 		}
 
 		constraints[baseIndex].type = ConstraintType::CN_ANCHOR_EQUAL_1;
@@ -3590,6 +3603,10 @@ namespace dyno
 
 		int idx1 = joints[tId].bodyId1;
 		int idx2 = joints[tId].bodyId2;
+
+		Real maxForce = joints[tId].maxForce;
+		Real maxTorque = joints[tId].maxTorque;
+
 		Vector<Real, 3> r1 = rotMat[idx1] * joints[tId].r1;
 		Vector<Real, 3> r2;
 		if (idx2 != INVALID)
@@ -3607,6 +3624,8 @@ namespace dyno
 			constraints[baseIndex + i].pos1 = joints[tId].w;
 			constraints[baseIndex + i].isValid = true;
 			constraints[baseIndex + i].rotQuat = joints[tId].q_init;
+			constraints[baseIndex + i].maxForce = maxForce;
+			constraints[baseIndex + i].maxTorque = maxTorque;
 		}
 
 		constraints[baseIndex].type = ConstraintType::CN_ANCHOR_EQUAL_1;
@@ -3615,6 +3634,134 @@ namespace dyno
 		constraints[baseIndex + 3].type = ConstraintType::CN_BAN_ROT_QUAT_1;
 		constraints[baseIndex + 4].type = ConstraintType::CN_BAN_ROT_QUAT_2;
 		constraints[baseIndex + 5].type = ConstraintType::CN_BAN_ROT_QUAT_3;
+	}
+
+
+	template<typename Joint, typename Constraint, typename Real, typename Coord>
+	__global__ void SF_damgedFixedJointConstraints(
+		DArray<Joint> joints,
+		DArray<Coord> B,
+		DArray<Real> lambda,
+		DArray<Constraint> constraints,
+		DArray<Real> mass,
+		int begin_index,
+		Real dt
+	)
+	{
+		int tId = threadIdx.x + blockDim.x * blockIdx.x;
+
+		if (tId >= joints.size())
+			return;
+
+		int baseIndex = 6 * tId + begin_index;
+
+		Real maxForce = constraints[baseIndex].maxForce;
+		Real maxTorque = constraints[baseIndex].maxTorque;
+
+		int idx = joints[tId].bodyId1;
+
+		Vec3f force(0.0f);
+		Vec3f torque(0.0f);
+
+		for (int i = 0; i < 6; i++)
+		{
+			force = force + B[4 * (baseIndex + i)] * lambda[baseIndex + i];
+			torque = torque + B[4 * (baseIndex + i) + 1] * lambda[baseIndex + i];
+		}
+
+		force = mass[idx] * force / dt;
+		torque = mass[idx] * torque / dt;
+		
+		if (force.norm() > maxForce || torque.norm() > maxTorque)
+		{
+			joints[tId].isDamaged = true;
+		}	
+	}
+
+	template<typename Joint, typename Constraint, typename Real, typename Coord>
+	__global__ void SF_damgedHingeJointConstraints(
+		DArray<Joint> joints,
+		DArray<Coord> B,
+		DArray<Real> lambda,
+		DArray<Constraint> constraints,
+		DArray<Real> mass,
+		int begin_index,
+		Real dt
+	)
+	{
+		int tId = threadIdx.x + blockDim.x * blockIdx.x;
+
+		if (tId >= joints.size())
+			return;
+
+		int baseIndex = 8 * tId + begin_index;
+
+		Real maxForce = constraints[baseIndex].maxForce;
+		Real maxTorque = constraints[baseIndex].maxTorque;
+
+		int idx = joints[tId].bodyId1;
+
+		Vec3f force(0.0f);
+		Vec3f torque(0.0f);
+
+		for (int i = 0; i < 5; i++)
+		{
+			force = force + B[4 * (baseIndex + i)] * lambda[baseIndex + i];
+			torque = torque + B[4 * (baseIndex + i) + 1] * lambda[baseIndex + i];
+		}
+
+		force = mass[idx] * force / dt;
+		torque = mass[idx] * torque / dt;
+
+		if (force.norm() > maxForce || torque.norm() > maxTorque)
+		{
+			joints[tId].isDamaged = true;
+		}
+	}
+
+	void damgedHingeJointConstraints(
+		DArray<HingeJoint<float>>& joints,
+		DArray<float>& lambda,
+		DArray<Vec3f>& B,
+		DArray<TConstraintPair<float>>& constraints,
+		DArray<float>& mass,
+		int begin_index,
+		Real dt
+	)
+	{
+		cuExecute(joints.size(),
+			SF_damgedHingeJointConstraints,
+			joints,
+			B,
+			lambda,
+			constraints,
+			mass,
+			begin_index,
+			dt);
+
+	}
+
+
+	void damgedFixedJointConstraints(
+		DArray<FixedJoint<float>>& joints,
+		DArray<float>& lambda,
+		DArray<Vec3f>& B,
+		DArray<TConstraintPair<float>>& constraints,
+		DArray<float>& mass,
+		int begin_index,
+		Real dt
+	)
+	{
+		cuExecute(joints.size(),
+			SF_damgedFixedJointConstraints,
+			joints,
+			B,
+			lambda,
+			constraints,
+			mass,
+			begin_index,
+			dt);
+
 	}
 
 	void setUpFixedJointConstraints(
@@ -3674,6 +3821,9 @@ namespace dyno
 		int idx1 = joints[tId].bodyId1;
 		int idx2 = joints[tId].bodyId2;
 
+		Real maxForce = joints[tId].maxForce;
+		Real maxTorque = joints[tId].maxTorque;
+
 		int baseIndex = 3 * tId + begin_index;
 
 		for (int i = 0; i < 3; i++)
@@ -3682,6 +3832,8 @@ namespace dyno
 			constraints[baseIndex + i].bodyId2 = idx2;
 			constraints[baseIndex + i].normal1 = pos[idx1] - joints[tId].anchorPoint;
 			constraints[baseIndex + i].isValid = true;
+			constraints[baseIndex + i].maxForce = maxForce;
+			constraints[baseIndex + i].maxTorque = maxTorque;
 		}
 
 		constraints[baseIndex].type = ConstraintType::CN_JOINT_NO_MOVE_1;
@@ -3922,6 +4074,20 @@ namespace dyno
 				Matrix K = inertia[idx1].inverse();
 				K_3[tId] = (K + CFM_3).inverse();
 			}
+		}
+
+		else if (constraints[tId].type == ConstraintType::CN_BAN_ROT_QUAT_1)
+		{
+			Matrix CFM_3(CFM[tId], 0, 0, 0, CFM[tId], 0, 0, 0, CFM[tId]);
+			Matrix K(0);
+			for (int i = 0; i < 3; i++)
+			{
+				for (int j = 0; j < 3; j++)
+				{
+					K(i, j) = J[4 * (tId + i) + 1].dot(B[4 * (tId + j) + 1]) + J[4 * (tId + i) + 3].dot(B[4 * (tId + j) + 3]);
+				}
+			}
+			K_3[tId] = (K + CFM_3).inverse();
 		}
 
 		else
@@ -4952,7 +5118,7 @@ namespace dyno
 		}
 		else
 		{
-			stepInverse = 5;
+			stepInverse = 20;
 		}
 
 		Real omega = Real(1) / stepInverse;
@@ -5026,6 +5192,7 @@ namespace dyno
 
 			for (int i = 0; i < 3; i++)
 			{
+				lambda[tId + i] += delta_lambda[i];
 				atomicAdd(&impulse[idx1 * 2][0], B[4 * (tId + i)][0] * delta_lambda[i]);
 				atomicAdd(&impulse[idx1 * 2][1], B[4 * (tId + i)][1] * delta_lambda[i]);
 				atomicAdd(&impulse[idx1 * 2][2], B[4 * (tId + i)][2] * delta_lambda[i]);
@@ -5359,7 +5526,7 @@ namespace dyno
 
 		Real d = J[4 * tId].dot(B[4 * tId]) + J[4 * tId + 1].dot(B[4 * tId + 1]) + J[4 * tId + 2].dot(B[4 * tId + 2]) + J[4 * tId + 3].dot(B[4 * tId + 3]);
 
-		D[tId] = d;
+		D[tId] = abs(d);
 	}
 
 	template<typename Coord, typename Real, typename Constraint>
@@ -5406,6 +5573,21 @@ namespace dyno
 			d,
 			J,
 			B);
+	}
+
+	Real calculateDiagnalsMax(
+		DArray<float> d,
+		DArray<Vec3f> J,
+		DArray<Vec3f> B
+	)
+	{
+		cuExecute(d.size(),
+			SF_calculateDiagnals,
+			d,
+			J,
+			B);
+		Reduction<float> rd;
+		return rd.maximum(d.begin(), d.size());
 	}
 
 	void calculateDiagnalsInv(
@@ -5625,8 +5807,36 @@ namespace dyno
 		DArray<float> &arr2
 	)
 	{
-		cuExecute(result.size(),
+		cuExecute(arr1.size(),
 			SF_vectorAdd,
+			result,
+			arr1,
+			arr2);
+	}
+
+	template<typename Real>
+	__global__ void SF_vectorSub(
+		DArray<Real> result,
+		DArray<Real> arr1,
+		DArray<Real> arr2
+	)
+	{
+		int tId = threadIdx.x + blockDim.x * blockIdx.x;
+
+		if (tId >= arr1.size())
+			return;
+
+		result[tId] = arr1[tId] - arr2[tId];
+	}
+
+	void vectorSub(
+		DArray<float>& result,
+		DArray<float>& arr1,
+		DArray<float>& arr2
+	)
+	{
+		cuExecute(result.size(),
+			SF_vectorSub,
 			result,
 			arr1,
 			arr2);
@@ -5678,18 +5888,19 @@ namespace dyno
 		DArray<float>& arr2
 	)
 	{
-		DArray<float> result;
-		result.resize(arr1.size());
+		DArray<float> res;
+		res.resize(arr1.size());
 
-		cuExecute(result.size(),
+		cuExecute(res.size(),
 			SF_vectorMultiplyVector,
-			result,
+			res,
 			arr1,
 			arr2
 		);
 
 		Reduction<float> red;
-		float answer = red.accumulate(result.begin(), result.size());
+		float answer = red.accumulate(res.begin(), res.size());
+		res.clear();
 		return answer;
 	}
 
@@ -5697,7 +5908,6 @@ namespace dyno
 	__global__ void SF_calculateAImpulse(
 		DArray<Coord> impulse,
 		DArray<Coord> B,
-		DArray<Real> d_inv,
 		DArray<Real> lambda,
 		DArray<Constraint> constraints
 	)
@@ -5706,7 +5916,7 @@ namespace dyno
 		if (tId >= lambda.size())
 			return;
 
-		Real tmp = lambda[tId] * d_inv[tId];
+		Real tmp = lambda[tId];
 
 		int idx1 = constraints[tId].bodyId1;
 		int idx2 = constraints[tId].bodyId2;
@@ -5782,44 +5992,6 @@ namespace dyno
 	}
 
 
-	void calculateGradient(
-		DArray<float> &freeGradient,
-		DArray<float> &choppedGradient,
-		DArray<float> &gradient,
-		DArray<Vec3f> &impulse,
-		DArray<Vec3f> &J,
-		DArray<Vec3f> &B,
-		DArray<float> &d_inv,
-		DArray<float> &lambda,
-		DArray<float> &eta,
-		DArray<float> &CFM,
-		DArray<TConstraintPair<float>> &constraints
-	)
-	{
-
-		// a = M^{-1}J^{T}D^{-1/2}x = B d lambda
-		cuExecute(gradient.size(),
-			SF_calculateAImpulse,
-			impulse,
-			B,
-			d_inv,
-			lambda,
-			constraints);
-
-		// g = D^{-1/2}(Ja + CD^{-1/2}x - b)
-		cuExecute(gradient.size(),
-			SF_calculateGradient,
-			freeGradient,
-			choppedGradient,
-			gradient,
-			CFM,
-			lambda,
-			eta,
-			d_inv,
-			impulse,
-			J,
-			constraints);
-	}
 
 
 	template<typename Coord, typename Real, typename Constraint>
@@ -5827,7 +5999,6 @@ namespace dyno
 		DArray<Real> Ax,
 		DArray<Real> CFM,
 		DArray<Real> lambda,
-		DArray<Real> d_inv,
 		DArray<Coord> impulse,
 		DArray<Coord> J,
 		DArray<Constraint> constraints
@@ -5853,7 +6024,39 @@ namespace dyno
 			g_i += J[4 * tId + 2].dot(impulse[idx2 * 2]) + J[4 * tId + 3].dot(impulse[idx2 * 2 + 1]);
 		}
 
-		g_i = (g_i + CFM[tId] * d_inv[tId] * lambda[tId]) * d_inv[tId];
+		g_i = g_i + CFM[tId] * lambda[tId];
+
+		Ax[tId] = g_i;
+	}
+
+	template<typename Coord, typename Real, typename Constraint>
+	__global__ void SF_calculateAxWithoutCFM(
+		DArray<Real> Ax,
+		DArray<Real> lambda,
+		DArray<Coord> impulse,
+		DArray<Coord> J,
+		DArray<Constraint> constraints
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x;
+
+		if (tId >= Ax.size())
+			return;
+
+		if (!constraints[tId].isValid)
+			return;
+
+		Real g_i = 0;
+
+		int idx1 = constraints[tId].bodyId1;
+		int idx2 = constraints[tId].bodyId2;
+
+		g_i = J[4 * tId].dot(impulse[idx1 * 2]) + J[4 * tId + 1].dot(impulse[idx1 * 2 + 1]);
+
+		if (idx2 != INVALID)
+		{
+			g_i += J[4 * tId + 2].dot(impulse[idx2 * 2]) + J[4 * tId + 3].dot(impulse[idx2 * 2 + 1]);
+		}
 
 		Ax[tId] = g_i;
 	}
@@ -5863,18 +6066,17 @@ namespace dyno
 		DArray<Vec3f>& impulse,
 		DArray<Vec3f>& J,
 		DArray<Vec3f>& B,
-		DArray<float>& d_inv,
 		DArray<float>& lambda,
 		DArray<float>& CFM,
 		DArray<TConstraintPair<float>>& constraints
 	)
 	{
-		// a = M^{-1}J^{T}D^{-1/2}x = B d lambda
+		impulse.reset();
+		// a = M^{-1}J^{T}x = B lambda
 		cuExecute(Ax.size(),
 			SF_calculateAImpulse,
 			impulse,
 			B,
-			d_inv,
 			lambda,
 			constraints);
 
@@ -5883,61 +6085,75 @@ namespace dyno
 			Ax,
 			CFM,
 			lambda,
-			d_inv,
 			impulse,
 			J,
 			constraints);
 	}
 
-	template<typename Real, typename Constraint>
-	__global__ void SF_calculateMaxStep(
-		DArray<Real> arr,
-		DArray<Real> p,
-		DArray<Real> lambda,
-		DArray<Constraint> constraints,
-		Real alpha_cg
+	void calculateAxWithoutCFM(
+		DArray<float>& Ax,
+		DArray<Vec3f>& impulse,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B,
+		DArray<float>& lambda,
+		DArray<TConstraintPair<float>>& constraints
 	)
 	{
-		int tId = threadIdx.x + blockDim.x * blockIdx.x;
-		if (tId >= arr.size())
-			return;
+		impulse.reset();
+		// a = M^{-1}J^{T}x = B lambda
+		cuExecute(Ax.size(),
+			SF_calculateAImpulse,
+			impulse,
+			B,
+			lambda,
+			constraints);
 
-		arr[tId] = alpha_cg;
-
-		if (constraints[tId].type == ConstraintType::CN_NONPENETRATION)
-		{
-			if (p[tId] > 0)
-				arr[tId] = lambda[tId] / p[tId];
-		}
+		cuExecute(Ax.size(),
+			SF_calculateAxWithoutCFM,
+			Ax,
+			lambda,
+			impulse,
+			J,
+			constraints);
 	}
 
-
-	float calculateMaxStep(
-		DArray<float>& p,
+	float calculateSpectralRadius(
+		DArray<float>& Ax,
+		DArray<Vec3f>& impulse,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B,
 		DArray<float>& lambda,
-		DArray<TConstraintPair<float>>& constraints,
-		float alpha_cg
+		DArray<TConstraintPair<float>>& constraints
 	)
 	{
-		DArray<float> tmp;
-		tmp.resize(p.size());
-		cuExecute(p.size(),
-			SF_calculateMaxStep,
-			tmp,
-			p,
-			lambda,
-			constraints,
-			alpha_cg);
+		Real norm;
+		for (int i = 0; i < 30; i++)
+		{
+			impulse.reset();
+			calculateAxWithoutCFM(
+				Ax,
+				impulse,
+				J,
+				B,
+				lambda,
+				constraints
+			);
 
-		Reduction<float> red;
-
-		return red.minimum(tmp.begin(), tmp.size());
+			norm = innerDotOfVector(Ax, Ax);
+			vectorMultiplyScale(lambda, Ax, 1 / sqrt(norm));
+		}
+		lambda.reset();
+		impulse.reset();
+		return sqrt(norm);
 	}
 
 	template<typename Real, typename Constraint>
 	__global__ void SF_projectionLambda(
 		DArray<Real> lambda,
-		DArray<Constraint> constraints
+		DArray<Constraint> constraints,
+		DArray<int> tag,
+		float mu,
+		int contact_size
 	)
 	{
 		int tId = threadIdx.x + blockDim.x * blockIdx.x;
@@ -5948,19 +6164,42 @@ namespace dyno
 		if (constraints[tId].type == ConstraintType::CN_NONPENETRATION)
 		{
 			if (lambda[tId] < 0)
+			{
 				lambda[tId] = 0;
+				atomicAdd(&tag[0], 1);
+			}
 		}
+
+		/*if (constraints[tId].type == ConstraintType::CN_FRICTION)
+		{
+			if (abs(lambda[tId]) > abs(mu * lambda[(tId - contact_size) / 2]) && abs(mu * lambda[(tId - contact_size) / 2]) > EPSILON)
+			{
+				lambda[tId] = (lambda[tId] > 0 ? mu * abs(lambda[(tId - contact_size) / 2]) : -mu * abs(lambda[(tId - contact_size) / 2]));
+				atomicAdd(&tag[0], 1);
+			}
+		}*/
 	}
 
-	void projectionLambda(
-		DArray<float> &lambda,
-		DArray<TConstraintPair<float>> &constraints
+	int projectionLambda(
+		DArray<float>& lambda,
+		DArray<TConstraintPair<float>>& constraints,
+		float mu,
+		int contact_size
 	)
 	{
+		DArray<int> tag;
+		tag.resize(1);
+		tag.reset();
 		cuExecute(lambda.size(),
 			SF_projectionLambda,
 			lambda,
-			constraints);
+			constraints,
+			tag,
+			mu,
+			contact_size);
+		CArray<int> htag;
+		htag.assign(tag);
+		return htag[0];
 	}
 
 	void calculateImpulse(
@@ -5975,7 +6214,6 @@ namespace dyno
 			SF_calculateAImpulse,
 			impulse,
 			B,
-			d_inv,
 			lambda,
 			constraints);
 	}
@@ -6028,4 +6266,127 @@ namespace dyno
 		std::vector<int> permutation = generatePermutation(n);
 		arr.assign(permutation);
 	}
+
+	template<typename Real, typename Matrix2x2, typename Matrix3x3, typename Constraint>
+	__global__ void SF_preconditionedResidual(
+		DArray<Real> residual,
+		DArray<Real> result,
+		DArray<Real> K_1,
+		DArray<Matrix2x2> K_2,
+		DArray<Matrix3x3> K_3,
+		DArray<Constraint> constraints
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tId >= residual.size())
+			return;
+
+		if (!constraints[tId].isValid)
+		{
+			return;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_1 || constraints[tId].type == ConstraintType::CN_BAN_ROT_1 || constraints[tId].type == ConstraintType::CN_JOINT_NO_MOVE_1 || constraints[tId].type == ConstraintType::CN_BAN_ROT_QUAT_1)
+		{
+			Vec3f tmp(residual[tId], residual[tId + 1], residual[tId + 2]);
+			Vec3f delta = K_3[tId] * tmp;
+			for (int i = 0; i < 3; i++)
+			{
+				result[tId + i] = delta[i];
+			}
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_ALLOW_ROT1D_1 || constraints[tId].type == ConstraintType::CN_ANCHOR_TRANS_1)
+		{
+			Vec2f tmp(residual[tId], residual[tId + 1]);
+			Vec2f delta = K_2[tId] * tmp;
+			for (int i = 0; i < 2; i++)
+			{
+				result[tId + i] = delta[i];
+			}
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_NONPENETRATION || constraints[tId].type == ConstraintType::CN_FRICTION || constraints[tId].type == ConstraintType::CN_JOINT_HINGE_MIN || constraints[tId].type == ConstraintType::CN_JOINT_HINGE_MAX || constraints[tId].type == ConstraintType::CN_JOINT_HINGE_MOTER || constraints[tId].type == ConstraintType::CN_JOINT_SLIDER_MIN || constraints[tId].type == ConstraintType::CN_JOINT_SLIDER_MAX || constraints[tId].type == ConstraintType::CN_JOINT_SLIDER_MOTER)
+		{
+			result[tId] = residual[tId] * K_1[tId];
+		}
+
+	}
+
+
+	void preconditionedResidual(
+		DArray<float>& residual,
+		DArray<float>& result,
+		DArray<float>& K_1,
+		DArray<Mat2f>& K_2,
+		DArray<Mat3f>& K_3,
+		DArray<TConstraintPair<float>>& constraints
+	)
+	{
+		cuExecute(residual.size(),
+			SF_preconditionedResidual,
+			residual,
+			result,
+			K_1,
+			K_2,
+			K_3,
+			constraints);
+	}
+
+
+	template<typename Real, typename Coord, typename Constraint>
+	__global__ void SF_matrixMultiplyVecBuildImpulse(
+		DArray<Coord> B,
+		DArray<Real> lambda,
+		DArray<Coord> impulse,
+		DArray<Constraint> constraints
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tId >= lambda.size())
+			return;
+		if (!constraints[tId].isValid)
+			return;
+
+		int idx1 = constraints[tId].bodyId1;
+		int idx2 = constraints[tId].bodyId2;
+
+		Real lambda_i = lambda[tId];
+
+		atomicAdd(&impulse[2 * idx1][0], B[4 * tId][0] * lambda_i);
+		atomicAdd(&impulse[2 * idx1][1], B[4 * tId][1] * lambda_i);
+		atomicAdd(&impulse[2 * idx1][2], B[4 * tId][2] * lambda_i);
+		atomicAdd(&impulse[2 * idx1 + 1][0], B[4 * tId + 1][0] * lambda_i);
+		atomicAdd(&impulse[2 * idx1 + 1][1], B[4 * tId + 1][1] * lambda_i);
+		atomicAdd(&impulse[2 * idx1 + 1][2], B[4 * tId + 1][2] * lambda_i);
+
+		if (idx2 != INVALID)
+		{
+			atomicAdd(&impulse[2 * idx2][0], B[4 * tId + 2][0] * lambda_i);
+			atomicAdd(&impulse[2 * idx2][1], B[4 * tId + 2][1] * lambda_i);
+			atomicAdd(&impulse[2 * idx2][2], B[4 * tId + 2][2] * lambda_i);
+			atomicAdd(&impulse[2 * idx2 + 1][0], B[4 * tId + 3][0] * lambda_i);
+			atomicAdd(&impulse[2 * idx2 + 1][1], B[4 * tId + 3][1] * lambda_i);
+			atomicAdd(&impulse[2 * idx2 + 1][2], B[4 * tId + 3][2] * lambda_i);
+		}
+	}
+
+	void calculateImpulseByLambda(
+		DArray<float> &lambda,
+		DArray<TConstraintPair<float>> &constraints,
+		DArray<Vec3f> &impulse,
+		DArray<Vec3f> &B
+	)
+	{
+		impulse.reset();
+		cuExecute(lambda.size(),
+			SF_matrixMultiplyVecBuildImpulse,
+			B,
+			lambda,
+			impulse,
+			constraints);
+	}
+
+
+
 }

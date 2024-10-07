@@ -202,5 +202,9 @@ namespace dyno
 
 		Quat1f rotQuat;
 
+		Real maxForce;
+
+		Real maxTorque;
+
 	};
 }

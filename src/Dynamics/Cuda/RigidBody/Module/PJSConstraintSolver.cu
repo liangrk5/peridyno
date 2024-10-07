@@ -410,7 +410,6 @@ namespace dyno
 		mK_3.resize(constraint_size);
 		mEta.resize(constraint_size);
 		mLambda.resize(constraint_size);
-		
 
 		
 
@@ -424,6 +423,7 @@ namespace dyno
 		
 
 		mContactNumber.reset();
+
 
 		calculateJacobianMatrix(
 			mJ,
@@ -482,6 +482,8 @@ namespace dyno
 
 		mImpulseC.resize(bodyNum * 2);
 		mImpulseExt.resize(bodyNum * 2);
+
+
 		mImpulseC.reset();
 		mImpulseExt.reset();
 

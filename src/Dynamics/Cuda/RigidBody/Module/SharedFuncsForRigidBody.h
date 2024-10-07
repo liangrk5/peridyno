@@ -225,6 +225,26 @@ namespace dyno
 		int begin_index
 	);
 
+	void damgedHingeJointConstraints(
+		DArray<HingeJoint<float>>& joints,
+		DArray<float>& lambda,
+		DArray<Vec3f>& B,
+		DArray<TConstraintPair<float>>& constraints,
+		DArray<float>& mass,
+		int begin_index,
+		Real dt
+	);
+
+	void damgedFixedJointConstraints(
+		DArray<FixedJoint<float>>& joints,
+		DArray<float>& lambda,
+		DArray<Vec3f>& B,
+		DArray<TConstraintPair<float>>& constraints,
+		DArray<float>& mass,
+		int begin_index,
+		Real dt
+	);
+
 	void setUpFixedJointConstraints(
 		DArray<TConstraintPair<float>> constraints,
 		DArray<FixedJoint<float>> joints,
@@ -371,6 +391,12 @@ namespace dyno
 		DArray<Vec3f> B
 	);
 
+	Real calculateDiagnalsMax(
+		DArray<float> d,
+		DArray<Vec3f> J,
+		DArray<Vec3f> B
+	);
+
 	void calculateDiagnalsInv(
 		DArray<float>& d_inv,
 		DArray<Vec3f>& J,
@@ -429,6 +455,21 @@ namespace dyno
 		DArray<float> &arr2
 	);
 
+	void vectorSub(
+		DArray<float>& result,
+		DArray<float>& arr1,
+		DArray<float>& arr2
+	);
+
+	void preconditionedResidual(
+		DArray<float>& residual,
+		DArray<float>& result,
+		DArray<float>& K_1,
+		DArray<Mat2f>& K_2,
+		DArray<Mat3f>& K_3,
+		DArray<TConstraintPair<float>>& constraints
+	);
+
 	void vectorMultiplyScale(
 		DArray<float> &result,
 		DArray<float> &initArr,
@@ -440,42 +481,42 @@ namespace dyno
 		DArray<float> &arr2
 	);
 
-	void calculateGradient(
-		DArray<float> &freeGradient,
-		DArray<float> &choppedGradient,
-		DArray<float> &gradient,
-		DArray<Vec3f> &impulse,
-		DArray<Vec3f> &J,
-		DArray<Vec3f> &B,
-		DArray<float> &d_inv,
-		DArray<float> &lambda,
-		DArray<float> &eta,
-		DArray<float> &CFM,
-		DArray<TConstraintPair<float>> &constraints
-	);
 
 	
 	void calculateAx(
-		DArray<float> &Ax,
-		DArray<Vec3f> &impulse,
-		DArray<Vec3f> &J,
-		DArray<Vec3f> &B,
-		DArray<float> &d_inv,
-		DArray<float> &lambda,
-		DArray<float> &CFM,
-		DArray<TConstraintPair<float>> &constraints
-	);
-
-	float calculateMaxStep(
-		DArray<float>& p,
+		DArray<float>& Ax,
+		DArray<Vec3f>& impulse,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B,
 		DArray<float>& lambda,
-		DArray<TConstraintPair<float>>& constraints,
-		float alpha_cg
+		DArray<float>& CFM,
+		DArray<TConstraintPair<float>>& constraints
 	);
 
-	void projectionLambda(
+	void calculateAxWithoutCFM(
+		DArray<float>& Ax,
+		DArray<Vec3f>& impulse,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B,
 		DArray<float>& lambda,
 		DArray<TConstraintPair<float>>& constraints
+	);
+
+	float calculateSpectralRadius(
+		DArray<float>& Ax,
+		DArray<Vec3f>& impulse,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B,
+		DArray<float>& lambda,
+		DArray<TConstraintPair<float>>& constraints
+	);
+
+
+	int projectionLambda(
+		DArray<float>& lambda,
+		DArray<TConstraintPair<float>>& constraints,
+		float mu,
+		int contact_size
 	);
 
 	void calculateImpulse(
@@ -494,4 +535,11 @@ namespace dyno
 	std::vector<int> generatePermutation(int n);
 
 	void generatePermutationDArray(DArray<int> arr);
+
+	void calculateImpulseByLambda(
+		DArray<float> &lambda,
+		DArray<TConstraintPair<float>> &constraints,
+		DArray<Vec3f> &impulse,
+		DArray<Vec3f> &B
+	);
 }

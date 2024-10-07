@@ -25,64 +25,20 @@ std::shared_ptr<SceneGraph> creatBricks()
 	auto rigid = scn->addNode(std::make_shared<RigidBodySystem<DataType3f>>());
 	RigidBodyInfo rigidBody;
 	rigidBody.linearVelocity = Vec3f(0, 0, 0);
-	BoxInfo box1, box2, box3;
+	BoxInfo box;
+	Real scale = 5.0f;
+	box.center =  scale * Vec3f(0, 0.065, 0);
+	box.halfLength = scale * Vec3f(0.1, 0.065, 0.065);
 
-	box1.center = Vec3f(0, 0.5, 0);
-	box1.halfLength = Vec3f(1.0, 0.05, 1.0);
+	auto boxActor = rigid->addBox(box, rigidBody);
 
-	box2.center = Vec3f(0, 0.2, 0.8);
-	box2.halfLength = Vec3f(0.7, 0.1, 0.1);
+	for (int i = 1; i < 10; i++)
+	{
+		box.center = scale * Vec3f(0.18 * i, 0.065, 0);
+		auto boxActor1 = rigid->addBox(box, rigidBody);
+	}
 
-	box3.center = Vec3f(0, 0.2, -0.8);
-	box3.halfLength = Vec3f(0.7, 0.1, 0.1);
-
-	auto bodyActor = rigid->addBox(box1, rigidBody);
-	auto frontActor = rigid->addBox(box2, rigidBody);
-	auto rearActor = rigid->addBox(box3, rigidBody);
-
-	SphereInfo sphere1, sphere2, sphere3, sphere4;
-
-	sphere1.center = Vec3f(0.9, 0.1, 0.8);
-	sphere1.radius = 0.1;
-	sphere2.center = Vec3f(-0.9, 0.1, 0.8);
-	sphere2.radius = 0.1;
-	sphere3.center = Vec3f(0.9, 0.1, -0.8);
-	sphere3.radius = 0.1;
-	sphere4.center = Vec3f(-0.9, 0.1, -0.8);
-	sphere4.radius = 0.1;
-
-	auto frontLeftTire = rigid->addSphere(sphere1, rigidBody);
-	auto frontRightTire = rigid->addSphere(sphere2, rigidBody);
-	auto rearLeftTire = rigid->addSphere(sphere3, rigidBody);
-	auto rearRightTire = rigid->addSphere(sphere4, rigidBody);
-
-	auto& joint1 = rigid->createHingeJoint(frontLeftTire, frontActor);
-	joint1.setAnchorPoint(frontLeftTire->center);
-	joint1.setAxis(Vec3f(1, 0, 0));
-	joint1.setMoter(30);
-
-	auto& joint2 = rigid->createHingeJoint(frontRightTire, frontActor);
-	joint2.setAnchorPoint(frontRightTire->center);
-	joint2.setAxis(Vec3f(1, 0, 0));
-	joint2.setMoter(30);
-
-	auto& joint3 = rigid->createHingeJoint(rearLeftTire, rearActor);
-	joint3.setAnchorPoint(rearLeftTire->center);
-	joint3.setAxis(Vec3f(1, 0, 0));
-	joint3.setMoter(30);
-
-	auto& joint4 = rigid->createHingeJoint(rearRightTire, rearActor);
-	joint4.setAnchorPoint(rearRightTire->center);
-	joint4.setAxis(Vec3f(1, 0, 0));
-	joint4.setMoter(30);
-
-	auto& joint5 = rigid->createFixedJoint(rearActor, bodyActor);
-	joint5.setAnchorPoint(rearActor->center);
-
-	auto& joint6 = rigid->createHingeJoint(frontActor, bodyActor);
-	joint6.setAnchorPoint(frontActor->center);
-	joint6.setAxis(Vec3f(0, 1, 0));
-	joint6.setRange(M_PI / 12, M_PI / 12);
+	
 
 
 	auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
@@ -131,6 +87,7 @@ int main()
 	GlfwApp app;
 	app.setSceneGraph(creatBricks());
 	app.initialize(1280, 768);
+	app.renderWindow()->getCamera()->setUnitScale(5.0f);
 	app.mainLoop();
 
 	return 0;
