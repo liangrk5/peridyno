@@ -21,6 +21,7 @@
 #include "RigidBody/RigidBodyShared.h"
 #include "Topology/DiscreteElements.h"
 
+
 namespace dyno
 {
 	template<typename TDataType>
@@ -53,23 +54,23 @@ namespace dyno
 
 		DEF_VAR(Real, GravityValue, 9.8, "");
 
-		DEF_VAR(Real, FrictionCoefficient, 10, "");
+		DEF_VAR(Real, FrictionCoefficient, 1000, "");
 
 		DEF_VAR(Real, Slop, 0.001, "");
 
 		DEF_VAR(Real, Frequency, 30, "");
 
-		DEF_VAR(Real, DampingRatio, 1.0, "");
+		DEF_VAR(Real, DampingRatio, 0.2, "");
 
 		DEF_VAR(uint, IterationNumberForVelocitySolverCG, 30, "");
 
-		DEF_VAR(uint, IterationNumberForVelocitySolverJacobi, 0, "");
+		DEF_VAR(uint, IterationNumberForVelocitySolverJacobi, 10, "");
 
-		DEF_VAR(Real, LinearDamping, 0.1, "");
+		DEF_VAR(Real, LinearDamping, 0.05, "");
 
-		DEF_VAR(Real, AngularDamping, 0.1, "");
+		DEF_VAR(Real, AngularDamping, 0.05, "");
 
-		DEF_VAR(Real, Tolerance, 0.00001, "");
+		DEF_VAR(Real, Tolerance, 0.000001, "");
 
 	public:
 		DEF_VAR_IN(Real, TimeStep, "Time step size");
@@ -92,8 +93,10 @@ namespace dyno
 
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
 
+		DEF_ARRAY_IN(int, FixedTag, DeviceType::GPU, "Fixed Body Tag");
+
 		DEF_INSTANCE_IN(DiscreteElements<TDataType>, DiscreteElements, "");
-	
+
 	protected:
 		void constrain() override;
 
@@ -109,20 +112,16 @@ namespace dyno
 
 		DArray<Real> mEta;
 		DArray<Real> mLambda;
-		DArray<Real> mLambdaOldJoint;
 
 
 		DArray<ContactPair> mContactsInLocalFrame;
 		DArray<Constraint> mVelocityConstraints;
 
-		DArray<Real> mResidualOld;
 		DArray<Real> mResidual;
 		DArray<Real> tmpArray;
-		DArray<Real> mP;
 		DArray<Real> mAp;
-		
+
 		int cnt = 0;
-		DArray<Real> mErrors;
 
 		std::vector<float> residuals;
 
@@ -141,6 +140,6 @@ namespace dyno
 		DArray<Real> mERP;
 
 		int mJointSize = -1;
-		
+
 	};
 }

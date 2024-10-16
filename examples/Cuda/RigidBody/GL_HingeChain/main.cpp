@@ -26,40 +26,46 @@ std::shared_ptr<SceneGraph> creatBricks()
 
 
 	auto rigid = scn->addNode(std::make_shared<RigidBodySystem<DataType3f>>());
-	RigidBodyInfo rigidBody;
-	Real scale = 2.5;
-	SphereInfo sphere;
-	sphere.center = scale * Vec3f(-4.6, 20, 0.5);
-	sphere.radius = scale * 2.5;
-	//auto sphereActor = rigid->addSphere(sphere, rigidBody, 0.001);
-	BoxInfo newbox, oldbox;
-	oldbox.center = scale * Vec3f(-2.0, 20, 0.5);
-	oldbox.halfLength = scale * Vec3f(0.05, 0.09, 0.02);
-	oldbox.rot = Quat1f(M_PI / 2, Vec3f(0, 0, 1));
-	rigidBody.linearVelocity = Vec3f(0, 0, 0);
-	auto oldBoxActor = rigid->addBox(oldbox, rigidBody);
-	rigidBody.linearVelocity = Vec3f(0, 0, 0);
-	/*auto& hingeJoint1 = rigid->createHingeJoint(oldBoxActor, sphereActor);
-	hingeJoint1.setAnchorPoint((oldbox.center + sphere.center) / 2);
-	hingeJoint1.setAxis(Vec3f(0, 0, 1));*/
-
-	for (int i = 0; i < 20; i++)
+	
+	for (int i = 0; i < 3; i++)
 	{
-		newbox.center = oldbox.center + scale * Vec3f(0.2, 0, 0);
-		newbox.halfLength = oldbox.halfLength;
-		newbox.rot = Quat1f(M_PI / 2, Vec3f(0, 0, 1));
-		auto newBoxActor = rigid->addBox(newbox, rigidBody);
-		auto& hingeJoint = rigid->createHingeJoint(oldBoxActor, newBoxActor);
-		hingeJoint.setAnchorPoint((oldbox.center + newbox.center) / 2);
-		hingeJoint.setAxis(Vec3f(0, 0, 1));
-		hingeJoint.setRange(-M_PI, M_PI);
-		oldbox = newbox;
-		oldBoxActor = newBoxActor;
+		RigidBodyInfo rigidBody;
+		Real scale = 2.5;
+		SphereInfo sphere;
+		sphere.center = scale * Vec3f(-2.3, 5, 0.5 + 2.0 * i);
+		sphere.radius = scale * 0.2;
+		auto sphereActor = rigid->addSphere(sphere, rigidBody, 5 * pow(100,i));
+		BoxInfo newbox, oldbox;
+		oldbox.center = scale * Vec3f(-2.0, 5, 0.5 + 2.0 * i);
+		oldbox.halfLength = scale * Vec3f(0.05, 0.09, 0.02);
+		oldbox.rot = Quat1f(M_PI / 2, Vec3f(0, 0, 1));
+		rigidBody.linearVelocity = Vec3f(0, 0, 0);
+		auto oldBoxActor = rigid->addBox(oldbox, rigidBody);
+		rigidBody.linearVelocity = Vec3f(0, 0, 0);
+		auto& hingeJoint1 = rigid->createHingeJoint(oldBoxActor, sphereActor);
+		hingeJoint1.setAnchorPoint((oldbox.center + sphere.center) / 2);
+		hingeJoint1.setAxis(Vec3f(0, 0, 1));
+		//hingeJoint1.setMaxForceAndTorque(10000, 7000);
 
-		if (i == 19)
+		for (int i = 0; i < 20; i++)
 		{
-			auto& pointJoint = rigid->createPointJoint(newBoxActor);
-			pointJoint.setAnchorPoint(newbox.center);
+			newbox.center = oldbox.center + scale * Vec3f(0.2, 0, 0);
+			newbox.halfLength = oldbox.halfLength;
+			newbox.rot = /*Quat1f(3 * (i + 1), Vec3f(1, 0, 0)) */ Quat1f(M_PI / 2, Vec3f(0, 0, 1));
+			auto newBoxActor = rigid->addBox(newbox, rigidBody);
+			auto& hingeJoint = rigid->createHingeJoint(oldBoxActor, newBoxActor);
+			hingeJoint.setAnchorPoint((oldbox.center + newbox.center) / 2);
+			hingeJoint.setAxis(Vec3f(0, 0, 1));
+			hingeJoint.setRange(-M_PI, M_PI);
+			//hingeJoint.setMaxForceAndTorque(10000, 7000);
+			oldbox = newbox;
+			oldBoxActor = newBoxActor;
+
+			if (i == 19)
+			{
+				auto& pointJoint = rigid->createPointJoint(newBoxActor);
+				pointJoint.setAnchorPoint(newbox.center);
+			}
 		}
 	}
 
@@ -122,6 +128,14 @@ int main()
 	GlfwApp app;
 	app.setSceneGraph(creatBricks());
 	app.initialize(1280, 768);
+	//Set the eye position for the camera
+	app.renderWindow()->getCamera()->setEyePos(Vec3f(-0.05, 4.01f, 8.80));
+
+	//Set the target position for the camera
+	app.renderWindow()->getCamera()->setTargetPos(Vec3f(0, 0, 0));
+
+	//Set the distance unit for the camera, the fault unit is meter
+	app.renderWindow()->getCamera()->setUnitScale(4.319f);
 	app.mainLoop();
 
 	return 0;

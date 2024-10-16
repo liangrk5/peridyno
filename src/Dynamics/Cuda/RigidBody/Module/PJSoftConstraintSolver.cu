@@ -18,6 +18,59 @@ namespace dyno
 	}
 
 	template<typename TDataType>
+	void PJSoftConstraintSolver<TDataType>::damgedJoints(Real dt)
+	{
+		int contact_size = this->inContacts()->size();
+		auto topo = this->inDiscreteElements()->constDataPtr();
+
+		int ballAndSocketJoint_size = topo->ballAndSocketJoints().size();
+		int sliderJoint_size = topo->sliderJoints().size();
+		int hingeJoint_size = topo->hingeJoints().size();
+		int fixedJoint_size = topo->fixedJoints().size();
+		int pointJoint_size = topo->pointJoints().size();
+
+
+		if (hingeJoint_size != 0)
+		{
+			auto& joints = topo->hingeJoints();
+			int begin_index = contact_size + 3 * ballAndSocketJoint_size + 8 * sliderJoint_size;
+			if (this->varFrictionEnabled()->getData())
+			{
+				begin_index += 2 * contact_size;
+			}
+
+			damgedHingeJointConstraints(
+				joints,
+				mLambda,
+				mB,
+				mVelocityConstraints,
+				this->inMass()->getData(),
+				begin_index,
+				dt
+			);
+		}
+
+		if (fixedJoint_size != 0)
+		{
+			auto& joints = topo->fixedJoints();
+			int begin_index = contact_size + 3 * ballAndSocketJoint_size + 8 * sliderJoint_size + 8 * hingeJoint_size;
+			if (this->varFrictionEnabled()->getData())
+			{
+				begin_index += 2 * contact_size;
+			}
+			damgedFixedJointConstraints(
+				joints,
+				mLambda,
+				mB,
+				mVelocityConstraints,
+				this->inMass()->getData(),
+				begin_index,
+				dt
+			);
+		}
+	}
+
+	template<typename TDataType>
 	void PJSoftConstraintSolver<TDataType>::initializeJacobian(Real dt)
 	{
 		int constraint_size = 0;
@@ -163,6 +216,7 @@ namespace dyno
 				mVelocityConstraints,
 				joints,
 				this->inRotationMatrix()->getData(),
+				this->inQuaternion()->getData(),
 				begin_index
 			);
 		}
@@ -274,6 +328,7 @@ namespace dyno
 
 
 		updateVelocity(
+			this->inFixedTag()->getData(),
 			this->inVelocity()->getData(),
 			this->inAngularVelocity()->getData(),
 			mImpulseExt,
@@ -309,7 +364,21 @@ namespace dyno
 			}
 		}
 
+		if (this->varFractureEnabled()->getValue())
+		{
+			damgedJoints(dt);
+			mImpulseC.reset();
+			calculateImpulseByLambda(
+				mLambda,
+				mVelocityConstraints,
+				mImpulseC,
+				mB
+			);
+		}
+
+	
 		updateVelocity(
+			this->inFixedTag()->getData(),
 			this->inVelocity()->getData(),
 			this->inAngularVelocity()->getData(),
 			mImpulseC,
@@ -328,6 +397,7 @@ namespace dyno
 			this->inInitialInertia()->getData(),
 			dt
 		);
+
 	}
 
 	DEFINE_CLASS(PJSoftConstraintSolver);

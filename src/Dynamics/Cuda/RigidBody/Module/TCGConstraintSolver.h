@@ -16,19 +16,19 @@
  */
 
 #pragma once
+
 #include "Module/ConstraintModule.h"
 #include "RigidBody/RigidBodyShared.h"
-
 #include "Topology/DiscreteElements.h"
 
-#include "Collision/Attribute.h"
 
 namespace dyno
 {
 	template<typename TDataType>
-	class TJConstraintSolver : public ConstraintModule
+	class TCGConstraintSolver : public ConstraintModule
 	{
-		DECLARE_TCLASS(TJConstraintSolver, TDataType)
+		DECLARE_TCLASS(TCGConstraintSolver, TDataType)
+
 	public:
 		typedef typename TDataType::Real Real;
 		typedef typename TDataType::Coord Coord;
@@ -44,8 +44,8 @@ namespace dyno
 		typedef typename FixedJoint<Real> FixedJoint;
 		typedef typename PointJoint<Real> PointJoint;
 
-		TJConstraintSolver();
-		~TJConstraintSolver();
+		TCGConstraintSolver();
+		~TCGConstraintSolver();
 
 	public:
 		DEF_VAR(bool, FrictionEnabled, true, "");
@@ -54,19 +54,25 @@ namespace dyno
 
 		DEF_VAR(Real, GravityValue, 9.8, "");
 
-		DEF_VAR(Real, FrictionCoefficient, 100, "");
+		DEF_VAR(Real, FrictionCoefficient, 1000, "");
 
-		DEF_VAR(Real, Slop, 0, "");
+		DEF_VAR(Real, Slop, 0.001, "");
 
-		DEF_VAR(Real, BaumgarteBias, 0.3, "");
+		DEF_VAR(Real, Frequency, 150, "");
+
+		DEF_VAR(Real, DampingRatio, 0.2, "");
 
 		DEF_VAR(uint, SubStepping, 10, "");
 
-		DEF_VAR(uint, IterationNumberForVelocitySolver, 30, "");
+		DEF_VAR(uint, IterationNumberForVelocitySolverCG, 30, "");
 
-		DEF_VAR(Real, LinearDamping, 0.1, "");
+		DEF_VAR(uint, IterationNumberForVelocitySolverJacobi, 10, "");
 
-		DEF_VAR(Real, AngularDamping, 0.1, "");
+		DEF_VAR(Real, LinearDamping, 0.05, "");
+
+		DEF_VAR(Real, AngularDamping, 0.05, "");
+
+		DEF_VAR(Real, Tolerance, 0.000001, "");
 
 	public:
 		DEF_VAR_IN(Real, TimeStep, "Time step size");
@@ -109,9 +115,18 @@ namespace dyno
 		DArray<Real> mEta;
 		DArray<Real> mLambda;
 
-		DArray<ContactPair> mContactsInLocalFrame;
 
+		DArray<ContactPair> mContactsInLocalFrame;
 		DArray<Constraint> mVelocityConstraints;
+
+		DArray<Real> mResidual;
+		DArray<Real> tmpArray;
+		DArray<Real> mAp;
+
+		int cnt = 0;
+
+		std::vector<float> residuals;
+
 
 		DArray<int> mContactNumber;
 
@@ -119,6 +134,14 @@ namespace dyno
 		DArray<Mat2f> mK_2;
 		DArray<Matrix> mK_3;
 
-		DArray<Real> mErrors;
+		DArray<Real> mA;
+		DArray<Real> mZ;
+		DArray<Real> mZold;
+
+		DArray<Real> mCFM;
+		DArray<Real> mERP;
+
+		int mJointSize = -1;
+
 	};
 }

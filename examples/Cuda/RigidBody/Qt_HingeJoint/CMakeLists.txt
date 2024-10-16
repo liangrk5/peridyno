@@ -3,5 +3,5 @@ if(PERIDYNO_QT_GUI AND PERIDYNO_LIBRARY_RIGIDBODY)
         RigidBody
         Modeling
         QtGUI)
-    add_example(Qt_BallAndSocketJoint RigidBody LIB_DEPENDENCY)
+    add_example(Qt_HingeJoint RigidBody LIB_DEPENDENCY)
 endif()

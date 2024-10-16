@@ -84,11 +84,15 @@ std::shared_ptr<SceneGraph> creatCar()
 		sphere4.radius = 0.450;
 
 		box3.center = Vec3f(0.812, 0.450, 1.722) + tr;
-		box3.halfLength = Vec3f(0.15, 0.15, 0.15) + tr;
-		box4.center = Vec3f(-0.8122, 0.450, 1.722) + tr;
-		box4.halfLength = Vec3f(0.15, 0.15, 0.15) + tr;
+		box3.halfLength = Vec3f(0.15, 0.15, 0.15);
+		box4.center = Vec3f(-0.812, 0.450, 1.722) + tr;
+		box4.halfLength = Vec3f(0.15, 0.15, 0.15);
 
-		
+		box5.center = Vec3f(0, 0.450, 1.722) + tr;
+		box5.halfLength = Vec3f(0.8, 0.15, 0.15);
+
+		box6.center = Vec3f(0, 0.450, -1.426) + tr;
+		box6.halfLength = Vec3f(1.5, 0.15, 0.15);
 
 		
 
@@ -116,6 +120,7 @@ std::shared_ptr<SceneGraph> creatCar()
 		auto rearLeftTireActor = jeep->addSphere(sphere3, rigidbody, 500);
 		auto rearRightTireActor = jeep->addSphere(sphere4, rigidbody, 500);
 
+		auto frontAxleActor = jeep->addBox(box5, rigidbody, 500);
 		auto frontLeftActor = jeep->addBox(box3, rigidbody, 5000);
 		auto frontRightActor = jeep->addBox(box4, rigidbody, 5000);
 
@@ -158,7 +163,20 @@ std::shared_ptr<SceneGraph> creatCar()
 		joint7.setAxis(Vec3f(0, 1, 0));
 		joint7.setRange(0, 0);
 
-		
+		auto& joint8 = jeep->createSliderJoint(frontLeftActor, frontAxleActor);
+		joint8.setAnchorPoint((frontLeftActor->center + frontAxleActor->center) / 2);
+		joint8.setAxis(Vec3f(0, 1, 0));
+		joint8.setRange(-0.1, 0.1);
+
+		auto& joint9 = jeep->createSliderJoint(frontRightActor, frontAxleActor);
+		joint9.setAnchorPoint((frontLeftActor->center + frontAxleActor->center) / 2);
+		joint9.setAxis(Vec3f(0, 1, 0));
+		joint9.setRange(-0.1, 0.1);
+
+		auto& joint10 = jeep->createSliderJoint(bodyActor, frontAxleActor);
+		joint10.setAnchorPoint((bodyActor->center + frontAxleActor->center) / 2);
+		joint10.setAxis(Vec3f(0, 1, 0));
+		joint10.setRange(-0.1, 0.1);
 
 
 		jeep->bind(bodyActor, Pair<uint, uint>(5, i));
@@ -211,7 +229,7 @@ std::shared_ptr<SceneGraph> creatCar()
 
 	//Visualize rigid bodies
 
-	/*auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
+	auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
 	jeep->stateTopology()->connect(mapper->inDiscreteElements());
 	jeep->graphicsPipeline()->pushModule(mapper);
 
@@ -221,7 +239,7 @@ std::shared_ptr<SceneGraph> creatCar()
 	sRender->setRoughness(0.7f);
 	sRender->setMetallic(3.0f);
 	mapper->outTriangleSet()->connect(sRender->inTriangleSet());
-	jeep->graphicsPipeline()->pushModule(sRender);*/
+	jeep->graphicsPipeline()->pushModule(sRender);
 
 	return scn;
 }

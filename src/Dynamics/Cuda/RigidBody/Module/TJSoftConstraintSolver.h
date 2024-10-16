@@ -20,6 +20,7 @@
 #include "RigidBody/RigidBodyShared.h"
 
 #include "Topology/DiscreteElements.h"
+#include "Collision/Attribute.h"
 
 namespace dyno
 {
@@ -46,6 +47,8 @@ namespace dyno
 		~TJSoftConstraintSolver();
 
 	public:
+		DEF_VAR(bool, FractureEnabled, true, "");
+
 		DEF_VAR(bool, FrictionEnabled, true, "");
 
 		DEF_VAR(bool, GravityEnabled, true, "");
@@ -60,13 +63,15 @@ namespace dyno
 
 		DEF_VAR(uint, SubStepping, 10, "");
 
-		DEF_VAR(Real, LinearDamping, 0.1, "");
+		DEF_VAR(Real, LinearDamping, 0.05, "");
 
-		DEF_VAR(Real, AngularDamping, 0.1, "");
+		DEF_VAR(Real, AngularDamping, 0.05, "");
 
 		DEF_VAR(Real, DampingRatio, 1.0, "");
 
 		DEF_VAR(Real, Hertz, 300, "");
+
+		DEF_VAR(Real, Threshold, 1.0, "");
 
 	public:
 		DEF_VAR_IN(Real, TimeStep, "Time step size");
@@ -89,6 +94,8 @@ namespace dyno
 
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
 
+		DEF_ARRAY_IN(int, FixedTag, DeviceType::GPU, "Fixed Body Tag");
+
 		DEF_INSTANCE_IN(DiscreteElements<TDataType>, DiscreteElements, "");
 
 	protected:
@@ -97,6 +104,7 @@ namespace dyno
 	private:
 		void initializeJacobian(Real dt);
 		void initializeRelaxation();
+		void damagedJoints(Real dt);
 
 	private:
 		DArray<Coord> mJ;

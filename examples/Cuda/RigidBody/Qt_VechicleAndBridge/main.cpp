@@ -57,16 +57,16 @@ std::shared_ptr<SceneGraph> creatCar()
 		{
 			auto up = texMesh->shapes()[it]->boundingBox.v1;
 			auto down = texMesh->shapes()[it]->boundingBox.v0;
-			/*SphereInfo sphere;
+			SphereInfo sphere;
 			sphere.center = texMesh->shapes()[it]->boundingTransform.translation();
 			sphere.radius = std::abs(up.y - down.y) / 2;
-			Actors[it] = jeep->addSphere(sphere, rigidbody, 100);*/
-			CapsuleInfo capsule;
+			Actors[it] = jeep->addSphere(sphere, rigidbody, 100);
+			/*CapsuleInfo capsule;
 			capsule.center = texMesh->shapes()[it]->boundingTransform.translation();
 			capsule.rot = Quat1f(M_PI / 2, Vec3f(0, 0, 1));
 			capsule.radius = std::abs(up.y - down.y) / 2;
 			capsule.halfLength = 0.1495;
-			Actors[it] = jeep->addCapsule(capsule, rigidbody, 100);
+			Actors[it] = jeep->addCapsule(capsule, rigidbody, 100);*/
 			jeep->bind(Actors[it], Pair<uint, uint>(it, 0));
 		}
 		else
@@ -117,8 +117,8 @@ std::shared_ptr<SceneGraph> creatCar()
 		}
 		else if(it != 51)
 		{
-			box.halfLength = Vec3f(abs(tmp.x), abs(tmp.y) * 0.86, abs(tmp.z));
-			Actors[it] = jeep->addBox(box, rigidbody, 10000000);
+			box.halfLength = Vec3f(abs(tmp.x), abs(tmp.y) * 0.80, abs(tmp.z));
+			Actors[it] = jeep->addBox(box, rigidbody, 1000);
 		}
 		else
 		{
@@ -158,14 +158,15 @@ std::shared_ptr<SceneGraph> creatCar()
 		}
 		if (it == 49)
 		{
-			auto& fixedJoint = jeep->createUnilateralFixedJoint(Actors[it+1]);
-			fixedJoint.setAnchorPoint(Actors[it+1]->center);
+			/*auto& fixedJoint1 = jeep->createUnilateralFixedJoint(Actors[it+1]);
+			fixedJoint1.setAnchorPoint(Actors[it + 1]->center);
 			auto& fixedJoint2 = jeep->createUnilateralFixedJoint(Actors[it]);
 			fixedJoint2.setAnchorPoint(Actors[it]->center);
 			auto& fixedJoint3 = jeep->createUnilateralFixedJoint(Actors[it + 2]);
-			fixedJoint3.setAnchorPoint(Actors[it + 2]->center);
-			auto& fixedJoint4 = jeep->createFixedJoint(Actors[it], Actors[it + 1]);
-			fixedJoint4.setAnchorPoint((Actors[it]->center + Actors[it + 1]->center) / 2);
+			fixedJoint3.setAnchorPoint(Actors[it + 2]->center);*/
+			jeep->createUnilateralFixedJointStable(Actors[it + 1]);
+			jeep->createUnilateralFixedJointStable(Actors[it]);
+			jeep->createUnilateralFixedJointStable(Actors[it + 2]);
 		}
 	}
 
@@ -176,7 +177,7 @@ std::shared_ptr<SceneGraph> creatCar()
 			auto& hingeJoint = jeep->createHingeJoint(Actors[it], Actors[5]);
 			hingeJoint.setAnchorPoint(Actors[it]->center);
 			hingeJoint.setAxis(Vec3f(1, 0, 0));
-			hingeJoint.setMoter(30);
+			hingeJoint.setMoter(10);
 
 		}
 		else

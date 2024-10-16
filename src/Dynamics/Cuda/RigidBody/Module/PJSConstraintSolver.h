@@ -21,6 +21,8 @@
 
 #include "Topology/DiscreteElements.h"
 
+#include "Collision/Attribute.h"
+
 namespace dyno
 {
 	template<typename TDataType>
@@ -46,6 +48,8 @@ namespace dyno
 		~PJSConstraintSolver();
 
 	public:
+		DEF_VAR(bool, FractureEnabled, true, "");
+
 		DEF_VAR(bool, FrictionEnabled, true, "");
 
 		DEF_VAR(bool, GravityEnabled, true, "");
@@ -56,13 +60,13 @@ namespace dyno
 
 		DEF_VAR(Real, Slop, 0.0001, "");
 
-		DEF_VAR(Real, BaumgarteRate, 0.2, "");
+		DEF_VAR(Real, BaumgarteRate, 0.3, "");
 
 		DEF_VAR(uint, IterationNumberForVelocitySolver, 300, "");
 
-		DEF_VAR(Real, LinearDamping, 0.1, "");
+		DEF_VAR(Real, LinearDamping, 0.05, "");
 
-		DEF_VAR(Real, AngularDamping, 0.1, "");
+		DEF_VAR(Real, AngularDamping, 0.05, "");
 
 	public:
 		DEF_VAR_IN(Real, TimeStep, "Time step size");
@@ -85,6 +89,8 @@ namespace dyno
 
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
 
+		DEF_ARRAY_IN(int, FixedTag, DeviceType::GPU, "Fixed Body Tag");
+
 		DEF_INSTANCE_IN(DiscreteElements<TDataType>, DiscreteElements, "");
 
 	protected:
@@ -93,6 +99,7 @@ namespace dyno
 	private:
 		void initializeJacobian(Real dt);
 		void initializeRelaxation();
+		void damgedJoints(Real dt);
 
 	private:
 		DArray<Coord> mJ;
@@ -120,6 +127,12 @@ namespace dyno
 
 		DArray<Real> mErrors;
 		DArray<Real> mA;
+
+		DArray<int> mArr;
+
+		Real cvalue;
+
+		DArray<float> Ax;
 
 	};
 }

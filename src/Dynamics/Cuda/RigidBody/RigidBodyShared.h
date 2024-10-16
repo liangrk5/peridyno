@@ -102,7 +102,7 @@ namespace dyno
 			inertia = SquareMatrix<Real, 3>(0.0f);
 			friction = 0.0f;
 			restitution = 0.0f;
-			motionType = MT_Static;
+			motionType = MT_Kinematic;
 			collisionMask = CT_AllObjects;
 			shapeType = ET_Other;
 			angle = Quat<Real>(0.0f, 0.0f, 0.0f, 1.0f);

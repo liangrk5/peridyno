@@ -20,6 +20,7 @@
 #include "RigidBody/RigidBodyShared.h"
 
 #include "Topology/DiscreteElements.h"
+#include "Collision/Attribute.h"
 
 namespace dyno
 {
@@ -56,11 +57,11 @@ namespace dyno
 
 		DEF_VAR(Real, Slop, 0, "");
 
-		DEF_VAR(Real, BaumgarteBias, 1.0, "");
+		DEF_VAR(Real, BaumgarteBias, 0.2, "");
 		
-		DEF_VAR(uint, IterationNumberForVelocitySolver, 100, "");
+		DEF_VAR(uint, IterationNumberForVelocitySolver, 0, "");
 
-		DEF_VAR(uint, IterationNumberForPositionSolver, 200, "");
+		DEF_VAR(uint, IterationNumberForPositionSolver, 100, "");
 
 		DEF_VAR(Real, LinearDamping, 0.1, "");
 
@@ -87,6 +88,8 @@ namespace dyno
 
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
 
+		DEF_ARRAY_IN(int, FixedTag, DeviceType::GPU, "Fixed Body Tag");
+
 		DEF_INSTANCE_IN(DiscreteElements<TDataType>, DiscreteElements, "");
 
 	protected:
@@ -94,7 +97,7 @@ namespace dyno
 
 	private:
 		void initializeJacobian(Real dt);
-		void initializeJacobianForNJS();
+		void initializeJacobianForNJS(int i);
 
 	private:
 		DArray<Coord> mJ;
@@ -121,5 +124,16 @@ namespace dyno
 		DArray<Real> mK_1;
 		DArray<Mat2f> mK_2;
 		DArray<Matrix> mK_3;
+		DArray<Real> errors_begin;
+		DArray<Real> errors_after_velocity;
+		DArray<Real> errors_after_position;
+		std::vector<Real> velocity_solve;
+		std::vector<Real> position_solve;
+
+		Real initNum;
+		Real vel_solve;
+		Real pos_solve;
+
+		int cnt = 0;
 	};
 }

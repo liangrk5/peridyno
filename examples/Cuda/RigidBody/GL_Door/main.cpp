@@ -15,6 +15,7 @@
 
 #include "Collision/NeighborElementQuery.h"
 
+
 using namespace std;
 using namespace dyno;
 
@@ -23,31 +24,46 @@ std::shared_ptr<SceneGraph> creatBricks()
 	std::shared_ptr<SceneGraph> scn = std::make_shared<SceneGraph>();
 
 	auto rigid = scn->addNode(std::make_shared<RigidBodySystem<DataType3f>>());
-	uint dim = 5;
-	float h = 0.1f;
 
+	BoxInfo newBox, oldBox;
+	SphereInfo sphere;
 	RigidBodyInfo rigidBody;
-	rigidBody.linearVelocity = Vec3f(0.0, 0, 0);
-	BoxInfo box;
-	for (int i = 0; i < dim; i++)
+	sphere.center = Vec3f(0.07, 0.12, 0.03);
+	sphere.radius = 0.03;
+
+	rigidBody.linearVelocity = Vec3f(0, 0, -2.0);
+
+	auto body3 = rigid->addSphere(sphere, rigidBody, 100);
+
+	rigidBody.linearVelocity = Vec3f(0, 0, 0);
+
+	for (int i = 0; i < 10; i++)
 	{
-		for (int j = 0; j < dim; j++)
-		{
-			for (int k = 0; k < dim; k++)
-			{
-				box.center = Vec3f(2 * i * h - h * dim, h + (2.1f) * j * h, 2 * k * h - h * dim);
-				box.halfLength = Vec3f(h, h, h);
-				auto boxAt = rigid->addBox(box, rigidBody, 1);
-			}
-		}
+		newBox.center = Vec3f(0, 0.12, 0 - 0.1 * i);
+		newBox.halfLength = Vec3f(0.01, 0.1, 0.01);
+
+		oldBox.center = Vec3f(0.07, 0.12, 0 - 0.1 * i);
+		oldBox.halfLength = Vec3f(0.05, 0.1, 0.01);
+		auto body1 = rigid->addBox(newBox, rigidBody);
+		auto body2 = rigid->addBox(oldBox, rigidBody, 10);
+
+		auto& joint = rigid->createHingeJoint(body1, body2);
+		joint.setAnchorPoint(Vec3f(0.015, 0.12, 0 - 0.1 * i));
+		joint.setAxis(Vec3f(0, 1, 0));
+		joint.setRange(-M_PI / 6, M_PI / 6);
+		joint.setMaxForceAndTorque(100, 100);
+		rigid->createUnilateralFixedJointStable(body1);
 	}
+
+	/*auto& joint2 = rigid->*/
+	//joint2.setAnchorPoint(body1->center);
 
 	auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
 	rigid->stateTopology()->connect(mapper->inDiscreteElements());
 	rigid->graphicsPipeline()->pushModule(mapper);
 
 	auto sRender = std::make_shared<GLSurfaceVisualModule>();
-	sRender->setColor(Color::SteelBlue2());
+	sRender->setColor(Color(1, 1, 0));
 	sRender->setAlpha(1.0f);
 	mapper->outTriangleSet()->connect(sRender->inTriangleSet());
 	rigid->graphicsPipeline()->pushModule(sRender);
@@ -65,13 +81,12 @@ std::shared_ptr<SceneGraph> creatBricks()
 	rigid->graphicsPipeline()->pushModule(contactMapper);
 
 	auto wireRender = std::make_shared<GLWireframeVisualModule>();
-	wireRender->setColor(Color(0, 0, 0));
-	wireRender->varRadius()->setValue(0.01);
-	mapper->outTriangleSet()->connect(wireRender->inEdgeSet());
+	wireRender->setColor(Color(0, 0, 1));
+	contactMapper->outEdgeSet()->connect(wireRender->inEdgeSet());
 	rigid->graphicsPipeline()->pushModule(wireRender);
 
 	//Visualize contact points
-	/*auto contactPointMapper = std::make_shared<ContactsToPointSet<DataType3f>>();
+	auto contactPointMapper = std::make_shared<ContactsToPointSet<DataType3f>>();
 	elementQuery->outContacts()->connect(contactPointMapper->inContacts());
 	rigid->graphicsPipeline()->pushModule(contactPointMapper);
 
@@ -79,7 +94,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 	pointRender->setColor(Color(1, 0, 0));
 	pointRender->varPointSize()->setValue(0.003f);
 	contactPointMapper->outPointSet()->connect(pointRender->inPointSet());
-	rigid->graphicsPipeline()->pushModule(pointRender);*/
+	rigid->graphicsPipeline()->pushModule(pointRender);
 
 	return scn;
 }
@@ -89,10 +104,6 @@ int main()
 	GlfwApp app;
 	app.setSceneGraph(creatBricks());
 	app.initialize(1280, 768);
-	app.renderWindow()->getCamera()->setEyePos(Vec3f(1.65f, 2.52f, 1.87f));
-
-	//Set the target position for the camera
-	app.renderWindow()->getCamera()->setTargetPos(Vec3f(0, 0, 0));
 	app.mainLoop();
 
 	return 0;

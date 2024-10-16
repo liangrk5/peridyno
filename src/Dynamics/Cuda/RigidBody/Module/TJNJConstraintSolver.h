@@ -26,9 +26,9 @@
 namespace dyno
 {
 	template<typename TDataType>
-	class TJConstraintSolver : public ConstraintModule
+	class TJNJConstraintSolver : public ConstraintModule
 	{
-		DECLARE_TCLASS(TJConstraintSolver, TDataType)
+		DECLARE_TCLASS(TJNJConstraintSolver, TDataType)
 	public:
 		typedef typename TDataType::Real Real;
 		typedef typename TDataType::Coord Coord;
@@ -44,8 +44,8 @@ namespace dyno
 		typedef typename FixedJoint<Real> FixedJoint;
 		typedef typename PointJoint<Real> PointJoint;
 
-		TJConstraintSolver();
-		~TJConstraintSolver();
+		TJNJConstraintSolver();
+		~TJNJConstraintSolver();
 
 	public:
 		DEF_VAR(bool, FrictionEnabled, true, "");
@@ -63,6 +63,8 @@ namespace dyno
 		DEF_VAR(uint, SubStepping, 10, "");
 
 		DEF_VAR(uint, IterationNumberForVelocitySolver, 30, "");
+
+		DEF_VAR(uint, IterationNumberForPositionSolver, 10, "");
 
 		DEF_VAR(Real, LinearDamping, 0.1, "");
 
@@ -98,20 +100,27 @@ namespace dyno
 
 	private:
 		void initializeJacobian(Real dt);
+		void initializeJacobianForNJ();
 
 	private:
 		DArray<Coord> mJ;
+		DArray<Coord> mJ_p;
+
 		DArray<Coord> mB;
+		DArray<Coord> mB_p;
 
 		DArray<Coord> mImpulseC;
 		DArray<Coord> mImpulseExt;
 
 		DArray<Real> mEta;
+		DArray<Real> mEta_p;
+
 		DArray<Real> mLambda;
 
 		DArray<ContactPair> mContactsInLocalFrame;
 
 		DArray<Constraint> mVelocityConstraints;
+		DArray<Constraint> mPositionConstraints;
 
 		DArray<int> mContactNumber;
 
@@ -119,6 +128,5 @@ namespace dyno
 		DArray<Mat2f> mK_2;
 		DArray<Matrix> mK_3;
 
-		DArray<Real> mErrors;
 	};
 }

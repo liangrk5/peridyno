@@ -1,7 +1,7 @@
 #include "PJSConstraintSolver.h"
 #include "SharedFuncsForRigidBody.h"
-//#define USE_RELAXATION
-#define FILE_NAME "D:/Work Code/peridyno/Data/v2.txt"
+//#define FIXEDQUAT
+
 namespace dyno
 {
 	IMPLEMENT_TCLASS(PJSConstraintSolver, TDataType)
@@ -23,6 +23,10 @@ namespace dyno
 	{
 		int constraint_size = 0;
 		int contact_size = this->inContacts()->size();
+
+		mArr.resize(contact_size);
+
+		generatePermutationDArray(mArr);
 
 		auto topo = this->inDiscreteElements()->constDataPtr();
 
@@ -76,11 +80,12 @@ namespace dyno
 		if (contact_size != 0)
 		{
 			auto& contacts = this->inContacts()->getData();
-			setUpContactAndFrictionConstraints(
+			setUpContactAndFrictionConstraintsShuffle(
 				mVelocityConstraints,
 				mContactsInLocalFrame,
 				this->inCenter()->getData(),
 				this->inRotationMatrix()->getData(),
+				mArr,
 				this->varFrictionEnabled()->getData()
 			);
 		}
@@ -153,6 +158,7 @@ namespace dyno
 				mVelocityConstraints,
 				joints,
 				this->inRotationMatrix()->getData(),
+				this->inQuaternion()->getData(),
 				begin_index
 			);
 		}
@@ -230,6 +236,10 @@ namespace dyno
 		int contact_size = this->inContacts()->size();
 
 		auto topo = this->inDiscreteElements()->constDataPtr();
+
+		mArr.resize(3 * contact_size);
+
+		generatePermutationDArray(mArr);
 
 		int ballAndSocketJoint_size = topo->ballAndSocketJoints().size();
 		int sliderJoint_size = topo->sliderJoints().size();
@@ -369,6 +379,7 @@ namespace dyno
 				mVelocityConstraints,
 				joints,
 				this->inRotationMatrix()->getData(),
+				this->inQuaternion()->getData(),
 				begin_index
 			);
 		}
@@ -399,7 +410,6 @@ namespace dyno
 		mK_3.resize(constraint_size);
 		mEta.resize(constraint_size);
 		mLambda.resize(constraint_size);
-		
 
 		
 
@@ -414,6 +424,7 @@ namespace dyno
 
 		mContactNumber.reset();
 
+
 		calculateJacobianMatrix(
 			mJ,
 			mB,
@@ -424,8 +435,7 @@ namespace dyno
 			mVelocityConstraints
 		);
 
-		mErrors.resize(constraint_size);
-		mErrors.reset();
+
 
 		calculateEtaVectorForPJSBaumgarte(
 			mEta,
@@ -435,7 +445,6 @@ namespace dyno
 			this->inCenter()->getData(),
 			this->inQuaternion()->getData(),
 			mVelocityConstraints,
-			mErrors,
 			this->varSlop()->getValue(),
 			this->varBaumgarteRate()->getValue(),
 			dt
@@ -462,6 +471,59 @@ namespace dyno
 	}
 
 	template<typename TDataType>
+	void PJSConstraintSolver<TDataType>::damgedJoints(Real dt)
+	{
+		int contact_size = this->inContacts()->size();
+		auto topo = this->inDiscreteElements()->constDataPtr();
+
+		int ballAndSocketJoint_size = topo->ballAndSocketJoints().size();
+		int sliderJoint_size = topo->sliderJoints().size();
+		int hingeJoint_size = topo->hingeJoints().size();
+		int fixedJoint_size = topo->fixedJoints().size();
+		int pointJoint_size = topo->pointJoints().size();
+
+
+		if (hingeJoint_size != 0)
+		{
+			auto& joints = topo->hingeJoints();
+			int begin_index = contact_size + 3 * ballAndSocketJoint_size + 8 * sliderJoint_size;
+			if (this->varFrictionEnabled()->getData())
+			{
+				begin_index += 2 * contact_size;
+			}
+
+			damgedHingeJointConstraints(
+				joints,
+				mLambda,
+				mB,
+				mVelocityConstraints,
+				this->inMass()->getData(),
+				begin_index,
+				dt
+			);
+		}
+
+		if (fixedJoint_size != 0)
+		{
+			auto& joints = topo->fixedJoints();
+			int begin_index = contact_size + 3 * ballAndSocketJoint_size + 8 * sliderJoint_size + 8 * hingeJoint_size;
+			if (this->varFrictionEnabled()->getData())
+			{
+				begin_index += 2 * contact_size;
+			}
+			damgedFixedJointConstraints(
+				joints,
+				mLambda,
+				mB,
+				mVelocityConstraints,
+				this->inMass()->getData(),
+				begin_index,
+				dt
+			);
+		}
+	}
+
+	template<typename TDataType>
 	void PJSConstraintSolver<TDataType>::constrain()
 	{
 		uint bodyNum = this->inCenter()->size();
@@ -470,6 +532,8 @@ namespace dyno
 
 		mImpulseC.resize(bodyNum * 2);
 		mImpulseExt.resize(bodyNum * 2);
+
+
 		mImpulseC.reset();
 		mImpulseExt.reset();
 
@@ -486,6 +550,7 @@ namespace dyno
 
 
 		updateVelocity(
+			this->inFixedTag()->getData(),
 			this->inVelocity()->getData(),
 			this->inAngularVelocity()->getData(),
 			mImpulseExt,
@@ -498,7 +563,7 @@ namespace dyno
 		{
 			int contact_size = this->inContacts()->size();
 			initializeJacobian(dt);
-			errors.push_back(checkOutErrors(mErrors));
+			
 			int constraint_size = mVelocityConstraints.size();
 
 
@@ -523,17 +588,15 @@ namespace dyno
 				);
 			}
 
-			Real norm = checkOutError(
-				mJ,
-				mImpulseC,
-				mVelocityConstraints,
-				mEta
-			);
+			if (this->varFractureEnabled()->getValue())
+			{
+				damgedJoints(dt);
+			}
 
-			
-			errors.push_back(norm);
+
 
 			updateVelocity(
+				this->inFixedTag()->getData(),
 				this->inVelocity()->getData(),
 				this->inAngularVelocity()->getData(),
 				mImpulseC,

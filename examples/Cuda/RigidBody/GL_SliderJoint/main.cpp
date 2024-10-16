@@ -30,15 +30,15 @@ std::shared_ptr<SceneGraph> creatBricks()
 	BoxInfo box1, box2, box3, box4, box5;
 	rigidBody.linearVelocity = Vec3f(0, 0, 0);
 	
-	box1.center = Vec3f(0, 0.3, 0);
-	box1.halfLength = Vec3f(0.1, 0.2, 0.1);
+	box1.center = Vec3f(0, 0.25, 0);
+	box1.halfLength = Vec3f(0.09, 0.09, 0.09);
 	auto boxActor1 = rigid->addBox(box1, rigidBody);
 
 	rigidBody.linearVelocity = Vec3f(0, 0, 0);
 
 
 	box2.center = Vec3f(0, 0.05, 0);
-	box2.halfLength = Vec3f(1, 0.05, 0.3);
+	box2.halfLength = Vec3f(1, 0.04, 0.3);
 	auto boxActor2 = rigid->addBox(box2, rigidBody);
 
 	rigidBody.linearVelocity = Vec3f(-10, 0, 0);

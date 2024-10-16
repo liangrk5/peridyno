@@ -151,6 +151,7 @@ namespace dyno
 				mVelocityConstraints,
 				joints,
 				this->inRotationMatrix()->getData(),
+				this->inQuaternion()->getData(),
 				begin_index
 			);
 		}
@@ -181,6 +182,8 @@ namespace dyno
 		mK_3.resize(constraint_size);
 		mEta.resize(constraint_size);
 		mLambda.resize(constraint_size);
+
+		errors_begin.resize(constraint_size);
 
 		mJ.reset();
 		mB.reset();
@@ -214,13 +217,23 @@ namespace dyno
 			mK_3
 		);
 
-		calculateEtaVectorForPJS(
+		calculateEtaVectorForPJSBaumgarteWithErrors(
 			mEta,
 			mJ,
 			this->inVelocity()->getData(),
 			this->inAngularVelocity()->getData(),
-			mVelocityConstraints
+			this->inCenter()->getData(),
+			this->inQuaternion()->getData(),
+			mVelocityConstraints,
+			errors_begin,
+			this->varSlop()->getValue(),
+			this->varBaumgarteBias()->getValue(),
+			dt
 		);
+
+		initNum = innerDotOfVector(errors_begin, errors_begin);
+		initNum = sqrt(initNum);
+
 
 		if (contact_size != 0)
 		{
@@ -231,7 +244,7 @@ namespace dyno
 	}
 
 	template<typename TDataType>
-	void PJSNJSConstraintSolver<TDataType>::initializeJacobianForNJS()
+	void PJSNJSConstraintSolver<TDataType>::initializeJacobianForNJS(int i)
 	{
 		int constraint_size = 0;
 		int contact_size = this->inContacts()->size();
@@ -339,9 +352,10 @@ namespace dyno
 			int begin_index = contact_size + 3 * ballAndSocketJoint_size + 8 * sliderJoint_size + 8 * hingeJoint_size;
 
 			setUpFixedJointConstraints(
-				mPositionConstraints,
+				mVelocityConstraints,
 				joints,
 				this->inRotationMatrix()->getData(),
+				this->inQuaternion()->getData(),
 				begin_index
 			);
 		}
@@ -359,6 +373,8 @@ namespace dyno
 			);
 		}
 
+		
+
 		auto sizeOfRigids = this->inCenter()->size();
 		mJ_p.resize(4 * constraint_size);
 		mB_p.resize(4 * constraint_size);
@@ -368,6 +384,9 @@ namespace dyno
 		mEta_p.resize(constraint_size);
 		mLambda.resize(constraint_size);
 
+		errors_after_velocity.resize(constraint_size);
+		errors_after_position.resize(constraint_size);
+
 		mJ_p.reset();
 		mB_p.reset();
 		mK_1.reset();
@@ -375,6 +394,9 @@ namespace dyno
 		mK_3.reset();
 		mEta_p.reset();
 		mLambda.reset();
+
+		errors_after_position.reset();
+		errors_after_velocity.reset();
 
 		calculateJacobianMatrixForNJS(
 			mJ_p,
@@ -398,20 +420,59 @@ namespace dyno
 			mK_3
 		);
 
-		calculateEtaVectorForNJS(
-			mEta_p,
-			mJ_p,
-			this->inCenter()->getData(),
-			this->inQuaternion()->getData(),
-			mPositionConstraints,
-			this->varSlop()->getValue(),
-			this->varBaumgarteBias()->getValue()
-		);
+		if (i == 0)
+		{
+			calculateEtaVectorForNJSWithErrors(
+				mEta_p,
+				mJ_p,
+				this->inCenter()->getData(),
+				this->inQuaternion()->getData(),
+				mPositionConstraints,
+				errors_after_velocity,
+				this->varSlop()->getValue(),
+				0.2
+			);
+			this->vel_solve = innerDotOfVector(errors_after_velocity, errors_after_velocity);
+			this->vel_solve = sqrt(this->vel_solve);
+			this->velocity_solve.push_back(this->vel_solve - initNum);
+		}
+
+		else if (i == this->varIterationNumberForPositionSolver()->getValue())
+		{
+			calculateEtaVectorForNJSWithErrors(
+				mEta_p,
+				mJ_p,
+				this->inCenter()->getData(),
+				this->inQuaternion()->getData(),
+				mPositionConstraints,
+				errors_after_position,
+				this->varSlop()->getValue(),
+				0.2
+			);
+
+			this->pos_solve = innerDotOfVector(errors_after_position, errors_after_position);
+			this->pos_solve = sqrt(this->pos_solve);
+			position_solve.push_back(pos_solve - vel_solve);
+		}
+
+		else
+		{
+			calculateEtaVectorForNJS(
+				mEta_p,
+				mJ_p,
+				this->inCenter()->getData(),
+				this->inQuaternion()->getData(),
+				mPositionConstraints,
+				this->varSlop()->getValue(),
+				0.2
+			);
+		}
 	}
 
 	template<typename TDataType>
 	void PJSNJSConstraintSolver<TDataType>::constrain()
 	{
+		cnt++;
 		uint bodyNum = this->inCenter()->size();
 
 		auto topo = this->inDiscreteElements()->constDataPtr();
@@ -433,6 +494,7 @@ namespace dyno
 		}
 
 		updateVelocity(
+			this->inFixedTag()->getData(),
 			this->inVelocity()->getData(),
 			this->inAngularVelocity()->getData(),
 			mImpulseExt,
@@ -440,6 +502,18 @@ namespace dyno
 			this->varAngularDamping()->getValue(),
 			dt
 		);
+
+		updateGesture(
+			this->inCenter()->getData(),
+			this->inQuaternion()->getData(),
+			this->inRotationMatrix()->getData(),
+			this->inInertia()->getData(),
+			this->inVelocity()->getData(),
+			this->inAngularVelocity()->getData(),
+			this->inInitialInertia()->getData(),
+			dt
+		);
+
 		if (!this->inContacts()->isEmpty())
 		{
 			if (mContactsInLocalFrame.size() != this->inContacts()->size()) {
@@ -453,6 +527,7 @@ namespace dyno
 				this->inRotationMatrix()->getData()
 			);
 		}
+		int contact_size = this->inContacts()->size();
 
 		//Velocity Solver
 		if (!this->inContacts()->isEmpty() || topo->totalJointSize() > 0)
@@ -480,7 +555,8 @@ namespace dyno
 			}
 		}
 
-		updateVelocity(
+		/*updateVelocity(
+			this->inFixedTag()->getData(),
 			this->inVelocity()->getData(),
 			this->inAngularVelocity()->getData(),
 			mImpulseC,
@@ -488,17 +564,7 @@ namespace dyno
 			this->varAngularDamping()->getValue(),
 			dt
 		);
-
-		updateGesture(
-			this->inCenter()->getData(),
-			this->inQuaternion()->getData(),
-			this->inRotationMatrix()->getData(),
-			this->inInertia()->getData(),
-			this->inVelocity()->getData(),
-			this->inAngularVelocity()->getData(),
-			this->inInitialInertia()->getData(),
-			dt
-		);
+		*/
 
 		// Position Solver
 		if (!this->inContacts()->isEmpty() || topo->totalJointSize() > 0)
@@ -507,22 +573,23 @@ namespace dyno
 			{
 				mImpulseC.reset();
 				mLambda.reset();
-				initializeJacobianForNJS();
+				initializeJacobianForNJS(i);
 				int constraint_size = mPositionConstraints.size();
 				for (int j = 0; j < 1; j++)
 				{
-					JacobiIterationForNJS(
-						mLambda,
-						mImpulseC,
-						mJ_p,
-						mB_p,
-						mEta_p,
-						mPositionConstraints,
-						mContactNumber,
-						mK_1,
-						mK_2,
-						mK_3
-					);
+						JacobiIterationForNJS(
+							mLambda,
+							mImpulseC,
+							mJ_p,
+							mB_p,
+							mEta_p,
+							mPositionConstraints,
+							mContactNumber,
+							mK_1,
+							mK_2,
+							mK_3
+						);
+					
 				}
 
 				updatePositionAndRotation(
@@ -531,9 +598,23 @@ namespace dyno
 					this->inRotationMatrix()->getData(),
 					this->inInertia()->getData(),
 					this->inInitialInertia()->getData(),
-					mImpulseC
+					mImpulseC,
+					this->inVelocity()->getData(),
+					this->inAngularVelocity()->getData(),
+					dt
 				);
 			}
+
+			initializeJacobianForNJS(this->varIterationNumberForPositionSolver()->getValue());
+		}
+		std::cout << initNum << " " << vel_solve << " " << pos_solve << std::endl;
+		if (cnt == 1000)
+		{
+			for (int i = 0; i < velocity_solve.size(); i++)
+			{
+				std::cout << velocity_solve[i] << " " << position_solve[i] << std::endl;
+			}
+			std::cin.get();
 		}
 	}
 	DEFINE_CLASS(PJSNJSConstraintSolver);

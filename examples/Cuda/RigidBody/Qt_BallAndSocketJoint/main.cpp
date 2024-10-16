@@ -1,8 +1,7 @@
  #include <QtApp.h>
 
 #include <SceneGraph.h>
-
-#include <RigidBody/RigidBodySystem.h>
+#include <RigidBody/Vechicle.h>
 
 #include <GLRenderEngine.h>
 #include <GLPointVisualModule.h>
@@ -15,7 +14,12 @@
 #include <Mapping/AnchorPointToPointSet.h>
 
 #include "Collision/NeighborElementQuery.h"
+#include <Module/GLPhotorealisticInstanceRender.h>
 
+
+#include <map>
+
+#include "GltfLoader.h"
 using namespace std;
 using namespace dyno;
 
@@ -23,36 +27,50 @@ std::shared_ptr<SceneGraph> creatBricks()
 {
 	std::shared_ptr<SceneGraph> scn = std::make_shared<SceneGraph>();
 
-	auto rigid = scn->addNode(std::make_shared<RigidBodySystem<DataType3f>>());
 
-	BoxInfo newBox, oldBox;
-	RigidBodyInfo rigidBody;
-	rigidBody.bodyId = 1;
-	rigidBody.linearVelocity = Vec3f(1, 0.0, 0.0);
-	oldBox.center = Vec3f(0, 0.1, 0);
-	oldBox.halfLength = Vec3f(0.05, 0.05, 0.05);
-	auto oldBoxActor = rigid->addBox(oldBox, rigidBody);
+	auto prRender = std::make_shared<GLPhotorealisticInstanceRender>();
+	auto JointBody = scn->addNode(std::make_shared<Vechicle<DataType3f>>());
 
-	
+	auto gltf = scn->addNode(std::make_shared<GltfLoader<DataType3f>>());
+	gltf->varFileName()->setValue(getAssetPath() + "joint/Joint_gltf_Tex/Spherical.gltf");
+	gltf->setVisible(false);
+	gltf->stateTextureMesh()->connect(JointBody->inTextureMesh());
 
-	for (int i = 0; i < 100; i++)
+	JointBody->inTextureMesh()->connect(prRender->inTextureMesh());
+	JointBody->stateInstanceTransform()->connect(prRender->inTransform());
+	JointBody->graphicsPipeline()->pushModule(prRender);
+	JointBody->varGravityEnabled()->setValue(false);
+	auto texMesh = JointBody->inTextureMesh()->constDataPtr();
+	std::vector<int> joint_Id = { 0, 1};
+	std::map<int, std::shared_ptr<PdActor>> Actors;
+	RigidBodyInfo rigidbody;
+	rigidbody.angularVelocity = Vec3f(1, 0, 0);
+	for (auto it : joint_Id)
 	{
-		rigidBody.linearVelocity = Vec3f(0, 0, 0);
-		newBox.center = oldBox.center + Vec3f(0.0, 0.12f, 0.0);
-		newBox.halfLength = oldBox.halfLength;
-		auto newBoxActor = rigid->addBox(newBox, rigidBody);
-		auto& ballAndSocketJoint = rigid->createBallAndSocketJoint(oldBoxActor, newBoxActor);
-		ballAndSocketJoint.setAnchorPoint((oldBox.center + newBox.center) / 2);
-		oldBox = newBox;
-		oldBoxActor = newBoxActor;
+		auto up = texMesh->shapes()[it]->boundingBox.v1;
+		auto down = texMesh->shapes()[it]->boundingBox.v0;
+		BoxInfo box;
+		if (it == 1)
+			rigidbody.angularVelocity = Vec3f(0);
+			
+		box.center = texMesh->shapes()[it]->boundingTransform.translation();
+		Vec3f tmp = (texMesh->shapes()[it]->boundingBox.v1 - texMesh->shapes()[it]->boundingBox.v0) / 2;
+		box.halfLength = Vec3f(abs(tmp.x), abs(tmp.y), abs(tmp.z));
+		if(it == 0)
+			Actors[it] = JointBody->addBox(box, rigidbody, 100);
+		else
+			Actors[it] = JointBody->addBox(box, rigidbody, 100);
+		JointBody->bind(Actors[it], Pair<uint, uint>(it, 0));
 	}
 
+	auto& joint = JointBody->createBallAndSocketJoint(Actors[0], Actors[1]);
+	joint.setAnchorPoint(Vec3f(0, 0, 0));
 
-
-
+	auto& joint2 =JointBody->createUnilateralFixedJoint(Actors[1]);
+	joint2.setAnchorPoint(Actors[1]->center);
 	auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
-	rigid->stateTopology()->connect(mapper->inDiscreteElements());
-	rigid->graphicsPipeline()->pushModule(mapper);
+	JointBody->stateTopology()->connect(mapper->inDiscreteElements());
+	JointBody->graphicsPipeline()->pushModule(mapper);
 
 	auto sRender = std::make_shared<GLSurfaceVisualModule>();
 	sRender->setColor(Color(0.3f, 0.5f, 0.9f));
@@ -60,51 +78,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 	sRender->setRoughness(0.7f);
 	sRender->setMetallic(3.0f);
 	mapper->outTriangleSet()->connect(sRender->inTriangleSet());
-	rigid->graphicsPipeline()->pushModule(sRender);
-	//TODO: to enable using internal modules inside a node
-	//Visualize contact normals
-	auto elementQuery = std::make_shared<NeighborElementQuery<DataType3f>>();
-	rigid->stateTopology()->connect(elementQuery->inDiscreteElements());
-	rigid->stateCollisionMask()->connect(elementQuery->inCollisionMask());
-	rigid->graphicsPipeline()->pushModule(elementQuery);
-
-	auto contactMapper = std::make_shared<ContactsToEdgeSet<DataType3f>>();
-	elementQuery->outContacts()->connect(contactMapper->inContacts());
-	contactMapper->varScale()->setValue(0.02);
-	rigid->graphicsPipeline()->pushModule(contactMapper);
-
-	auto wireRender = std::make_shared<GLWireframeVisualModule>();
-	wireRender->setColor(Color(0, 0, 1));
-	contactMapper->outEdgeSet()->connect(wireRender->inEdgeSet());
-	rigid->graphicsPipeline()->pushModule(wireRender);
-
-	//Visualize contact points
-	auto contactPointMapper = std::make_shared<ContactsToPointSet<DataType3f>>();
-	elementQuery->outContacts()->connect(contactPointMapper->inContacts());
-	rigid->graphicsPipeline()->pushModule(contactPointMapper);
-
-	auto pointRender = std::make_shared<GLPointVisualModule>();
-	pointRender->setColor(Color(1, 0, 0));
-	pointRender->varPointSize()->setValue(0.0003f);
-	contactPointMapper->outPointSet()->connect(pointRender->inPointSet());
-	rigid->graphicsPipeline()->pushModule(pointRender);
-
-	//Visualize Anchor point for joint
-// 	auto anchorPointMapper = std::make_shared<AnchorPointToPointSet<DataType3f>>();
-// 	rigid->stateCenter()->connect(anchorPointMapper->inCenter());
-// 	rigid->stateRotationMatrix()->connect(anchorPointMapper->inRotationMatrix());
-// 	rigid->stateBallAndSocketJoints()->connect(anchorPointMapper->inBallAndSocketJoints());
-// 	//rigid->stateSliderJoints()->connect(anchorPointMapper->inSliderJoints());
-// 	//rigid->stateHingeJoints()->connect(anchorPointMapper->inHingeJoints());
-// 	//rigid->stateFixedJoints()->connect(anchorPointMapper->inFixedJoints());
-// 	rigid->graphicsPipeline()->pushModule(anchorPointMapper);
-// 
-// 	auto pointRender2 = std::make_shared<GLPointVisualModule>();
-// 	pointRender2->setColor(Color(1, 0, 0));
-// 	pointRender2->varPointSize()->setValue(0.002f);
-// 	anchorPointMapper->outPointSet()->connect(pointRender2->inPointSet());
-// 	rigid->graphicsPipeline()->pushModule(pointRender2);
-
+	JointBody->graphicsPipeline()->pushModule(sRender);
 	return scn;
 }
 
