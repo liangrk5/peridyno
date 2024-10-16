@@ -16,7 +16,7 @@
 #include "Collision/NeighborElementQuery.h"
 #include <Module/GLPhotorealisticInstanceRender.h>
 
-#include <PlaneModel.h>
+#include <BasicShapes/PlaneModel.h>
 #include <map>
 
 #include "GltfLoader.h"
