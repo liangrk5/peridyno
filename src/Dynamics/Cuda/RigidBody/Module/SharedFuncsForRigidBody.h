@@ -469,4 +469,78 @@ namespace dyno
 		DArray<float>& CFM,
 		DArray<TConstraintPair<float>>& constraints
 	);
+
+	void calculateDiagnalsForPrivateStiffness(
+		DArray<float>& d,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B
+	);
+
+	float calculateDiagnalsForMaxStiffness(
+		DArray<float>& d,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B
+	);
+
+	void evaluateForceAndDerivatives(
+		DArray<Vec3f>& impulse,
+		DArray<Vec3f>& P,
+		DArray<float>& effectMass,
+		DArray<TContactPair<float>>& contacts,
+		DArray<Vec3f>& J,
+		DArray<TConstraintPair<float>>& constraints,
+		DArray<Vec3f>& velocity,
+		DArray<Vec3f>& angular_velocity,
+		DArray<float>& normal_forces,
+		DArray<float>& mass,
+		DArray<Vec3f>& pos,
+		DArray<Quat1f>& rotation_q,
+		DArray<float>& fricCoeff,
+		float stiffness,
+		float fricStiffness,
+		float dt,
+		float hertz,
+		float maxEffectMass,
+		int contact_size,
+		int joint_size,
+		int autoStiffnessType,
+		bool frictionEnabled
+	);
+
+	void buildPreconditioner(
+		DArray<Mat3f>& preconditoner,
+		DArray<Vec3f>& P,
+		DArray<float>& mass,
+		DArray<Mat3f>& inertia,
+		float dt
+	);
+
+	void calculateGradientPrimal(
+		DArray<Vec3f>& gradient,
+		DArray<float>& mass,
+		DArray<Mat3f>& inertia,
+		DArray<Vec3f>& initialVelocity,
+		DArray<Vec3f>& velocity,
+		DArray<Vec3f>& initialAngularVelocity,
+		DArray<Vec3f>& angular_velocity,
+		DArray<Vec3f>& impulse,
+		float dt
+	);
+
+	void updateStatePrimal(
+		DArray<Attribute> attribute,
+		DArray<Vec3f>& initialPos,
+		DArray<Quat1f>& initialRotQuat,
+		DArray<Vec3f>& pos,
+		DArray<Quat1f>& rotQuat,
+		DArray<Mat3f>& rotMat,
+		DArray<Mat3f>& inertia,
+		DArray<Vec3f>& velocity,
+		DArray<Vec3f>& angular_velocity,
+		DArray<Mat3f>& inertia_init,
+		DArray<Mat3f> preconditioner,
+		DArray<Vec3f> gradient,
+		float stepSize,
+		float dt
+	);
 }

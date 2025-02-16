@@ -55,7 +55,7 @@ namespace dyno
 		std::shared_ptr<PdActor> addBox(
 			const BoxInfo& box, 
 			const RigidBodyInfo& bodyDef,
-			const Real density = Real(100));
+			const Real density = Real(10000));
 
 		std::shared_ptr<PdActor> addSphere(
 			const SphereInfo& sphere,

@@ -4436,6 +4436,25 @@ namespace dyno
 		D[tId] = d;
 	}
 
+	template<typename Coord, typename Real>
+	__global__ void SF_calculateEffectMass(
+		DArray<Real> D,
+		DArray<Coord> J,
+		DArray<Coord> B
+	)
+	{
+		int tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= D.size())
+			return;
+
+		Real d = J[4 * tId].dot(B[4 * tId]) + J[4 * tId + 1].dot(B[4 * tId + 1]) + J[4 * tId + 2].dot(B[4 * tId + 2]) + J[4 * tId + 3].dot(B[4 * tId + 3]);
+
+		if (d > EPSILON)
+		{
+			D[tId] = 1.0 / d;
+		}
+	}
+
 	void calculateDiagnals(
 		DArray<float> d,
 		DArray<Vec3f> J,
@@ -5292,5 +5311,771 @@ namespace dyno
 			lambda,
 			constraints);
 	}
+
+
+	float calculateDiagnalsForMaxStiffness(
+		DArray<float>& d,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B
+	)
+	{
+		cuExecute(d.size(),
+		 	SF_calculateEffectMass,
+			d,
+			J,
+			B);
+
+		Reduction<float> reduction;
+		return reduction.maximum(d.begin(), d.size());
+	}
+
+	void calculateDiagnalsForPrivateStiffness(
+		DArray<float>& d,
+		DArray<Vec3f>& J,
+		DArray<Vec3f>& B
+	)
+	{
+		cuExecute(d.size(),
+			SF_calculateEffectMass,
+			d,
+			J,
+			B);
+	}
+
+	template<typename Coord, typename Constraint, typename Real, typename Contact>
+	__global__ void SF_evaluteNormalForce(
+		DArray<Coord> impulse,
+		DArray<Coord> P,
+		DArray<Coord> J,
+		DArray<Constraint> constraints,
+		DArray<Real> normal_forces,
+		DArray<Real> mass,
+		DArray<Real> effectMass,
+		DArray<Contact> contacts,
+		Real constantStiffness,
+		Real hertz,
+		Real dt,
+		Real maxEffectMass,
+		int contact_size,
+		int stiffnessType
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tId >= contacts.size())
+			return;
+
+		int idx1 = contacts[tId].bodyId1;
+		int idx2 = contacts[tId].bodyId2;
+
+		Real cn = minimum(0.0f, constraints[tId].interpenetration);
+
+		Real stiffness = constantStiffness;
+		Real omega = 2.0f * M_PI * hertz;
+
+		if (stiffnessType == 1)
+		{
+			stiffness = maxEffectMass * omega * omega;
+		}
+
+		else if (stiffnessType == 2)
+		{
+			if (effectMass[tId] > 0)
+			{
+				stiffness = effectMass[tId] * omega * omega;
+			}
+		}
+
+		Real force = -stiffness * cn * dt;
+
+
+		int tag = abs(cn) < EPSILON ? 0 : 1;
+
+		Real invDt = 1 / dt;
+
+		normal_forces[tId] = abs(force) * invDt;
+
+
+		atomicAdd(&impulse[2 * idx1][0], J[4 * tId][0] * force);
+		atomicAdd(&impulse[2 * idx1][1], J[4 * tId][1] * force);
+		atomicAdd(&impulse[2 * idx1][2], J[4 * tId][2] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][0], J[4 * tId + 1][0] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][1], J[4 * tId + 1][1] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][2], J[4 * tId + 1][2] * force);
+		
+		Coord J_1(J[4 * tId][0] * J[4 * tId][0], J[4 * tId][1] * J[4 * tId][1], J[4 * tId][2] * J[4 * tId][2]);
+		Coord J_2(J[4 * tId + 1][0] * J[4 * tId + 1][0], J[4 * tId + 1][1] * J[4 * tId + 1][1], J[4 * tId + 1][2] * J[4 * tId + 1][2]);
+		J_1 = dt * stiffness * J_1 * tag;
+		J_2 = dt * stiffness * J_2 * tag;
+		atomicAdd(&P[2 * idx1][0], J_1[0]);
+		atomicAdd(&P[2 * idx1][1], J_1[1]);
+		atomicAdd(&P[2 * idx1][2], J_1[2]);
+		atomicAdd(&P[2 * idx1 + 1][0], J_2[0]);
+		atomicAdd(&P[2 * idx1 + 1][1], J_2[1]);
+		atomicAdd(&P[2 * idx1 + 1][2], J_2[2]);
+
+		if (idx2 != INVALID)
+		{
+			atomicAdd(&impulse[2 * idx2][0], J[4 * tId + 2][0] * force);
+			atomicAdd(&impulse[2 * idx2][1], J[4 * tId + 2][1] * force);
+			atomicAdd(&impulse[2 * idx2][2], J[4 * tId + 2][2] * force);
+
+			atomicAdd(&impulse[2 * idx2 + 1][0], J[4 * tId + 3][0] * force);
+			atomicAdd(&impulse[2 * idx2 + 1][1], J[4 * tId + 3][1] * force);
+			atomicAdd(&impulse[2 * idx2 + 1][2], J[4 * tId + 3][2] * force);
+
+			Coord J_3(J[4 * tId + 2][0] * J[4 * tId + 2][0], J[4 * tId + 2][1] * J[4 * tId + 2][1], J[4 * tId + 2][2] * J[4 * tId + 2][2]);
+			Coord J_4(J[4 * tId + 3][0] * J[4 * tId + 3][0], J[4 * tId + 3][1] * J[4 * tId + 3][1], J[4 * tId + 3][2] * J[4 * tId + 3][2]);
+
+			J_3 = dt * stiffness * J_3 * tag;
+			J_4 = dt * stiffness * J_4 * tag;
+
+			atomicAdd(&P[2 * idx2][0], J_3[0]);
+			atomicAdd(&P[2 * idx2][1], J_3[1]);
+			atomicAdd(&P[2 * idx2][2], J_3[2]);
+
+			atomicAdd(&P[2 * idx2 + 1][0], J_4[0]);
+			atomicAdd(&P[2 * idx2 + 1][1], J_4[1]);
+			atomicAdd(&P[2 * idx2 + 1][2], J_4[2]);
+		}
+	}
+
+	template<typename Coord, typename Constraint, typename Real, typename Quat>
+	__global__ void SF_evaluateJointForce(
+		DArray<Coord> impulse,
+		DArray<Real> effectMass,
+		DArray<Coord> P,
+		DArray<Coord> J,
+		DArray<Constraint> constraints,
+		DArray<Coord> pos,
+		DArray<Quat> rotation_q,
+		Real maxEffectMass,
+		Real constantStiffness,
+		Real dt,
+		Real hertz,
+		int contact_size,
+		int joint_size,
+		int stiffnessType,
+		bool hasFriction
+	)
+	{
+		int contactConstraintNum = hasFriction ? 3 * contact_size : contact_size;
+		int tId = threadIdx.x + blockIdx.x * blockDim.x + contactConstraintNum;
+		if (tId >= joint_size + contactConstraintNum)
+			return;
+
+		int idx1 = constraints[tId].bodyId1;
+		int idx2 = constraints[tId].bodyId2;
+
+		Real stiffness = constantStiffness;
+		Real omega = 2.0f * M_PI * hertz;
+
+		if (stiffnessType == 1)
+		{
+			stiffness = maxEffectMass * omega * omega;
+		}
+		else if (stiffnessType == 2)
+		{
+			stiffness = effectMass[tId] * omega * omega;
+		}
+
+		Real force = 0.0f;
+
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_1 || constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_2 || constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_3)
+		{
+			Coord r1 = constraints[tId].normal1;
+			Coord r2 = constraints[tId].normal2;
+			Coord pos1 = constraints[tId].pos1;
+			Coord errorVec;
+			if (idx2 != INVALID)
+			{
+				errorVec = pos[idx2] + r2 - pos[idx1] - r1;
+			}
+			else
+			{
+				errorVec = pos1 - pos[idx1] - r1;
+			}
+			Real error;
+			if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_1)
+				error = errorVec[0];
+			else if (constraints[tId].type == ConstraintType::CN_ANCHOR_EQUAL_2)
+				error = errorVec[1];
+			else
+				error = errorVec[2];
+			
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_ALLOW_ROT1D_1)
+		{
+			Coord a1 = constraints[tId].axis;
+			Coord b2 = constraints[tId].pos1;
+			Real error = a1.dot(b2);
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_ALLOW_ROT1D_2)
+		{
+			Coord a1 = constraints[tId].axis;
+			Coord c2 = constraints[tId].pos2;
+			Real error = a1.dot(c2);
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_JOINT_HINGE_MIN || constraints[tId].type == ConstraintType::CN_JOINT_HINGE_MAX)
+		{
+			Real error = constraints[tId].type == ConstraintType::CN_JOINT_HINGE_MIN ? constraints[tId].d_min : constraints[tId].d_max;
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_JOINT_SLIDER_MIN || constraints[tId].type == ConstraintType::CN_JOINT_SLIDER_MAX)
+		{
+			Real error = constraints[tId].type == ConstraintType::CN_JOINT_SLIDER_MIN ? constraints[tId].d_min : constraints[tId].d_max;
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_1)
+		{
+			Quat q1 = rotation_q[idx1];
+			Real error;
+			if (idx2 != INVALID)
+			{
+				Quat q2 = rotation_q[idx2];
+				Quat q_init = constraints[tId].rotQuat;
+				Quat q_error = q2 * q_init * q1.inverse();
+
+				error = q_error.x * 2;
+			}
+			else
+			{
+				Quat diff = rotation_q[idx1] * constraints[tId].rotQuat.inverse();
+				error = -diff.x * 2;
+			}
+			
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_2)
+		{
+			Quat q1 = rotation_q[idx1];
+			Real error;
+			if (idx2 != INVALID)
+			{
+				Quat q2 = rotation_q[idx2];
+				Quat q_init = constraints[tId].rotQuat;
+				Quat q_error = q2 * q_init * q1.inverse();
+
+				error = q_error.y * 2;
+			}
+			else
+			{
+				Quat diff = rotation_q[idx1] * constraints[tId].rotQuat.inverse();
+				error = -diff.y * 2;
+			}
+
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_BAN_ROT_3)
+		{
+			Quat q1 = rotation_q[idx1];
+			Real error;
+			if (idx2 != INVALID)
+			{
+				Quat q2 = rotation_q[idx2];
+				Quat q_init = constraints[tId].rotQuat;
+				Quat q_error = q2 * q_init * q1.inverse();
+
+				error = q_error.z * 2;
+			}
+			else
+			{
+				Quat diff = rotation_q[idx1] * constraints[tId].rotQuat.inverse();
+				error = -diff.z * 2;
+			}
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_JOINT_NO_MOVE_1)
+		{
+			Coord errorVec = constraints[tId].normal1;
+			Real error = errorVec[0];
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_JOINT_NO_MOVE_2)
+		{
+			Coord errorVec = constraints[tId].normal1;
+			Real error = errorVec[1];
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_JOINT_NO_MOVE_3)
+		{
+			Coord errorVec = constraints[tId].normal1;
+			Real error = errorVec[2];
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_TRANS_1)
+		{
+			Coord r1 = constraints[tId].pos1;
+			Coord r2 = constraints[tId].pos2;
+			Coord n1 = constraints[tId].normal1;
+
+			Real error = (pos[idx2] + r2 - pos[idx1] - r1).dot(n1);
+			force = -stiffness * error * dt;
+		}
+
+		if (constraints[tId].type == ConstraintType::CN_ANCHOR_TRANS_2)
+		{
+			Coord r1 = constraints[tId].pos1;
+			Coord r2 = constraints[tId].pos2;
+			Coord n2 = constraints[tId].normal2;
+
+			Real error = (pos[idx2] + r2 - pos[idx1] - r1).dot(n2);
+			force = -stiffness * error * dt;
+		}
+
+		// update impulse
+		atomicAdd(&impulse[2 * idx1][0], J[4 * tId][0] * force);
+		atomicAdd(&impulse[2 * idx1][1], J[4 * tId][1] * force);
+		atomicAdd(&impulse[2 * idx1][2], J[4 * tId][2] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][0], J[4 * tId + 1][0] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][1], J[4 * tId + 1][1] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][2], J[4 * tId + 1][2] * force);
+
+		// update p p <- p + diag(dt k_i J^T J)
+		atomicAdd(&P[2 * idx1][0], dt * stiffness * J[4 * tId][0] * J[4 * tId][0]);
+		atomicAdd(&P[2 * idx1][1], dt * stiffness* J[4 * tId][1] * J[4 * tId][1]);
+		atomicAdd(&P[2 * idx1][2], dt * stiffness* J[4 * tId][2] * J[4 * tId][2]);
+		atomicAdd(&P[2 * idx1 + 1][0], dt * stiffness * J[4 * tId + 1][0] * J[4 * tId + 1][0]);
+		atomicAdd(&P[2 * idx1 + 1][1], dt * stiffness * J[4 * tId + 1][1] * J[4 * tId + 1][1]);
+		atomicAdd(&P[2 * idx1 + 1][2], dt * stiffness * J[4 * tId + 1][2] * J[4 * tId + 1][2]);
+
+		if (idx2 != INVALID)
+		{
+			// update impulse
+			atomicAdd(&impulse[2 * idx2][0], J[4 * tId + 2][0] * force);
+			atomicAdd(&impulse[2 * idx2][1], J[4 * tId + 2][1] * force);
+			atomicAdd(&impulse[2 * idx2][2], J[4 * tId + 2][2] * force);
+			atomicAdd(&impulse[2 * idx2 + 1][0], J[4 * tId + 3][0] * force);
+			atomicAdd(&impulse[2 * idx2 + 1][1], J[4 * tId + 3][1] * force);
+			atomicAdd(&impulse[2 * idx2 + 1][2], J[4 * tId + 3][2] * force);
+
+			// update p p <- p + diag(dt k_i J^T J)
+			atomicAdd(&P[2 * idx2][0], dt * stiffness * J[4 * tId + 2][0] * J[4 * tId + 2][0]);
+			atomicAdd(&P[2 * idx2][1], dt * stiffness * J[4 * tId + 2][1] * J[4 * tId + 2][1]);
+			atomicAdd(&P[2 * idx2][2], dt * stiffness * J[4 * tId + 2][2] * J[4 * tId + 2][2]);
+			atomicAdd(&P[2 * idx2 + 1][0], dt * stiffness * J[4 * tId + 3][0] * J[4 * tId + 3][0]);
+			atomicAdd(&P[2 * idx2 + 1][1], dt * stiffness * J[4 * tId + 3][1] * J[4 * tId + 3][1]);
+			atomicAdd(&P[2 * idx2 + 1][2], dt * stiffness * J[4 * tId + 3][2] * J[4 * tId + 3][2]);
+		}
+
+	}
+
+	template<typename Coord, typename Constraint, typename Real>
+	__global__ void SF_evaluateFrictionForce(
+		DArray<Coord> impulse,
+		DArray<Real> effectMass,
+		DArray<Coord> P,
+		DArray<Coord> J,
+		DArray<Constraint> constraints,
+		DArray<Coord> velocity,
+		DArray<Coord> angular_velocity,
+		DArray<Real> fns,
+		DArray<Real> frictionCoeff,
+		Real fricStiffness,
+		Real maxEffectMass,
+		Real hertz,
+		Real dt,
+		int contact_size,
+		int stiffnessType
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x + contact_size;
+		if (tId >= 3 * contact_size)
+			return;
+
+		int idx1 = constraints[tId].bodyId1;
+		int idx2 = constraints[tId].bodyId2;
+
+		Real stiffness = fricStiffness;
+		Real omega = 2.0f * M_PI * hertz;
+
+		if (stiffnessType == 1)
+		{
+			stiffness = maxEffectMass * omega * omega;
+		}
+		else if (stiffnessType == 2)
+		{
+			stiffness = effectMass[tId] * omega * omega;
+		
+		}
+		stiffness = 10;
+
+
+		Real fric1 = J[4 * tId].dot(velocity[idx1]) + J[4 * tId + 1].dot(angular_velocity[idx1]);
+		if (idx2 != INVALID)
+		{
+			fric1 += J[4 * tId + 2].dot(velocity[idx2]) + J[4 * tId + 3].dot(angular_velocity[idx2]);
+		}
+
+		Real fric2;
+		if ((tId - contact_size) % 2 == 0)
+		{
+			fric2 = J[4 * (tId + 1)].dot(velocity[idx1]) + J[4 * (tId + 1) + 1].dot(angular_velocity[idx1]);
+			if (idx2 != INVALID)
+			{
+				fric2 += J[4 * (tId + 1) + 2].dot(velocity[idx2]) + J[4 * (tId + 1) + 3].dot(angular_velocity[idx2]);
+			}
+		}
+
+		else
+		{
+			fric2 = J[4 * (tId - 1)].dot(velocity[idx1]) + J[4 * (tId - 1) + 1].dot(angular_velocity[idx1]);
+			if (idx2 != INVALID)
+			{
+				fric2 += J[4 * (tId - 1) + 2].dot(velocity[idx2]) + J[4 * (tId - 1) + 3].dot(angular_velocity[idx2]);
+			}
+		}
+
+		Real max_val = abs(fric1) > abs(fric2) ? abs(fric1) : abs(fric2);
+		Real normFric = max_val * sqrt((fric1 / max_val) * (fric1 / max_val) + (fric2 / max_val) * (fric2 / max_val));
+
+
+		Real tmp;
+		Real force;
+		Real fc = frictionCoeff[idx1];
+		if (idx2 != INVALID)
+		{
+			fc = (fc + frictionCoeff[idx2]) / 2;
+		}
+
+		if (stiffness * normFric <= fc * fns[(tId - contact_size) / 2])
+		{
+			tmp = stiffness;
+		}
+
+		else
+		{
+			tmp = frictionCoeff[tId] * fns[(tId - contact_size) / 2] / normFric;
+		}
+
+		tmp = stiffness;
+
+		// delete friction force for body already depart
+		Real cn = constraints[tId].interpenetration;
+
+		if (cn > EPSILON)
+			tmp = 0;
+
+		force = -fric1 * tmp * dt;
+
+		atomicAdd(&impulse[2 * idx1][0], J[4 * tId][0] * force);
+		atomicAdd(&impulse[2 * idx1][1], J[4 * tId][1] * force);
+		atomicAdd(&impulse[2 * idx1][2], J[4 * tId][2] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][0], J[4 * tId + 1][0] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][1], J[4 * tId + 1][1] * force);
+		atomicAdd(&impulse[2 * idx1 + 1][2], J[4 * tId + 1][2] * force);
+
+		atomicAdd(&P[2 * idx1][0], J[4 * tId][0] * J[4 * tId][0] * dt * tmp);
+		atomicAdd(&P[2 * idx1][1], J[4 * tId][1] * J[4 * tId][1] * dt * tmp);
+		atomicAdd(&P[2 * idx1][2], J[4 * tId][2] * J[4 * tId][2] * dt * tmp);
+		atomicAdd(&P[2 * idx1 + 1][0], J[4 * tId + 1][0] * J[4 * tId + 1][0] * dt * tmp);
+		atomicAdd(&P[2 * idx1 + 1][1], J[4 * tId + 1][1] * J[4 * tId + 1][1] * dt * tmp);
+		atomicAdd(&P[2 * idx1 + 1][2], J[4 * tId + 1][2] * J[4 * tId + 1][2] * dt * tmp);
+
+		if (idx2 != INVALID)
+		{
+			atomicAdd(&impulse[2 * idx2][0], J[4 * tId + 2][0] * force);
+			atomicAdd(&impulse[2 * idx2][1], J[4 * tId + 2][1] * force);
+			atomicAdd(&impulse[2 * idx2][2], J[4 * tId + 2][2] * force);
+			atomicAdd(&impulse[2 * idx2 + 1][0], J[4 * tId + 3][0] * force);
+			atomicAdd(&impulse[2 * idx2 + 1][1], J[4 * tId + 3][1] * force);
+			atomicAdd(&impulse[2 * idx2 + 1][2], J[4 * tId + 3][2] * force);
+
+			atomicAdd(&P[2 * idx2][0], J[4 * tId + 2][0] * J[4 * tId + 2][0] * dt * tmp);
+			atomicAdd(&P[2 * idx2][1], J[4 * tId + 2][1] * J[4 * tId + 2][1] * dt * tmp);
+			atomicAdd(&P[2 * idx2][2], J[4 * tId + 2][2] * J[4 * tId + 2][2] * dt * tmp);
+			atomicAdd(&P[2 * idx2 + 1][0], J[4 * tId + 3][0] * J[4 * tId + 3][0] * dt * tmp);
+			atomicAdd(&P[2 * idx2 + 1][1], J[4 * tId + 3][1] * J[4 * tId + 3][1] * dt * tmp);
+			atomicAdd(&P[2 * idx2 + 1][2], J[4 * tId + 3][2] * J[4 * tId + 3][2] * dt * tmp);
+		}
+	}
+
+	void evaluateForceAndDerivatives(
+		DArray<Vec3f>& impulse,
+		DArray<Vec3f>& P,
+		DArray<float>& effectMass,
+		DArray<TContactPair<float>>& contacts,
+		DArray<Vec3f>& J,
+		DArray<TConstraintPair<float>>& constraints,
+		DArray<Vec3f>& velocity,
+		DArray<Vec3f>& angular_velocity,
+		DArray<float>& normal_forces,
+		DArray<float>& mass,
+		DArray<Vec3f>& pos,
+		DArray<Quat1f>& rotation_q,
+		DArray<float>& fricCoeff,
+		float stiffness,
+		float fricStiffness,
+		float dt,
+		float hertz,
+		float maxEffectMass,
+		int contact_size,
+		int joint_size,
+		int autoStiffnessType,
+		bool frictionEnabled
+	)
+	{
+		cuExecute(contact_size,
+			SF_evaluteNormalForce,
+			impulse,
+			P,
+			J,
+			constraints,
+			normal_forces,
+			mass,
+			effectMass,
+			contacts,
+			stiffness,
+			hertz,
+			dt,
+			maxEffectMass,
+			contact_size,
+			autoStiffnessType);
+
+		cuExecute(joint_size,
+			SF_evaluateJointForce,
+			impulse,
+			effectMass,
+			P,
+			J,
+			constraints,
+			pos,
+			rotation_q,
+			maxEffectMass,
+			stiffness,
+			dt,
+			hertz,
+			contact_size,
+			joint_size,
+			autoStiffnessType,
+			frictionEnabled);
+
+
+		if (frictionEnabled)
+		{
+			cuExecute(2 * contact_size,
+				SF_evaluateFrictionForce,
+				impulse,
+				effectMass,
+				P,
+				J,
+				constraints,
+				velocity,
+				angular_velocity,
+				normal_forces,
+				fricCoeff,
+				fricStiffness,
+				maxEffectMass,
+				hertz,
+				dt,
+				contact_size,
+				autoStiffnessType);
+		}
+
+	}
+
+	template<typename Matrix, typename Real, typename Coord>
+	__global__ void SF_buildPreconditioner(
+		DArray<Matrix> preconditioner,
+		DArray<Coord> P,
+		DArray<Real> mass,
+		DArray<Matrix> inertia,
+		Real dt
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tId >= mass.size())
+		{
+			return;
+		}
+
+		Matrix massMat(mass[tId], 0, 0, 0, mass[tId], 0, 0, 0, mass[tId]);
+		Matrix p_mat1(P[2 * tId].x * dt, 0, 0, 0, P[2 * tId].y * dt, 0, 0, 0, P[2 * tId].z * dt);
+		Matrix p_mat2(P[2 * tId + 1].x * dt, 0, 0, 0, P[2 * tId + 1].y * dt, 0, 0, 0, P[2 * tId + 1].z * dt);
+
+		preconditioner[2 * tId] = (massMat + p_mat1).inverse();
+		preconditioner[2 * tId + 1] = (inertia[tId] + p_mat2).inverse();
+	}
+
+	void buildPreconditioner(
+		DArray<Mat3f>& preconditoner,
+		DArray<Vec3f>& P,
+		DArray<float>& mass,
+		DArray<Mat3f>& inertia,
+		float dt
+	)
+	{
+		cuExecute(mass.size(),
+			SF_buildPreconditioner,
+			preconditoner,
+			P,
+			mass,
+			inertia,
+			dt);
+	}
+
+
+	template<typename Coord, typename Real, typename Matrix>
+	__global__ void SF_calculateGradientPrimal(
+		DArray<Coord> gradient,
+		DArray<Real> mass,
+		DArray<Matrix> inertia,
+		DArray<Coord> initialVelocity,
+		DArray<Coord> velocity,
+		DArray<Coord> initialAngularVelocity,
+		DArray<Coord> angularVelocity,
+		DArray<Coord> impulse,
+		Real dt
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tId >= mass.size())
+		{
+			return;
+		}
+
+		Matrix massMat(mass[tId], 0, 0, 0, mass[tId], 0, 0, 0, mass[tId]);
+
+		gradient[2 * tId] = massMat * (velocity[tId] - initialVelocity[tId]) - impulse[2 * tId];
+		gradient[2 * tId + 1] = inertia[tId] * (angularVelocity[tId] - initialAngularVelocity[tId]) - impulse[2 * tId + 1];
+
+		//printf("%lf, %lf, %lf\n", impulse[2 * tId].x, impulse[2 * tId].y, impulse[2 * tId].z);
+	}
+
+	void calculateGradientPrimal(
+		DArray<Vec3f>& gradient,
+		DArray<float>& mass,
+		DArray<Mat3f>& inertia,
+		DArray<Vec3f>& initialVelocity,
+		DArray<Vec3f>& velocity,
+		DArray<Vec3f>& initialAngularVelocity,
+		DArray<Vec3f>& angular_velocity,
+		DArray<Vec3f>& impulse,
+		float dt
+	)
+	{
+		cuExecute(mass.size(),
+			SF_calculateGradientPrimal,
+			gradient,
+			mass,
+			inertia,
+			initialVelocity,
+			velocity,
+			initialAngularVelocity,
+			angular_velocity,
+			impulse,
+			dt);
+	}
+
+
+	template<typename Matrix, typename Real, typename Coord, typename Attribute>
+	__global__ void SF_updateVelocityPrimal(
+		DArray<Attribute> attribute,
+		DArray<Coord> velocity,
+		DArray<Coord> angularVelocity,
+		DArray<Matrix> preconditioner,
+		DArray<Coord> gradient,
+		Real stepSize
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tId >= velocity.size())
+		{
+			return;
+		}
+		if (attribute[tId].isDynamic())
+		{
+			velocity[tId] = velocity[tId] - stepSize * preconditioner[2 * tId] * gradient[2 * tId];
+			angularVelocity[tId] = angularVelocity[tId] - stepSize * preconditioner[2 * tId + 1] * gradient[2 * tId + 1];
+		}
+	}
+
+	template<typename Coord, typename Quat, typename Matrix, typename Real, typename Attribute>
+	__global__ void SF_updateGesturePrimal(
+		DArray<Attribute> attribute,
+		DArray<Coord> initialPos,
+		DArray<Coord> pos,
+		DArray<Quat> initialRotQuat,
+		DArray<Quat> rotQuat,
+		DArray<Matrix> rotMat,
+		DArray<Matrix> inertia,
+		DArray<Coord> velocity,
+		DArray<Coord> angularVelocity,
+		DArray<Matrix> inertia_init,
+		Real dt
+	)
+	{
+		int tId = threadIdx.x + blockIdx.x * blockDim.x;
+		if (tId >= pos.size())
+			return;
+
+		if (!attribute[tId].isFixed())
+		{
+			pos[tId] = initialPos[tId] + velocity[tId] * dt;
+
+			rotQuat[tId] = initialRotQuat[tId] + dt * 0.5f * Quat(angularVelocity[tId][0], angularVelocity[tId][1], angularVelocity[tId][2], 0.0) * rotQuat[tId];
+
+			rotQuat[tId] = rotQuat[tId].normalize();
+
+			rotMat[tId] = rotQuat[tId].toMatrix3x3();
+
+			inertia[tId] = rotMat[tId] * inertia_init[tId] * rotMat[tId].inverse();
+		}
+	}
+
+	void updateStatePrimal(
+		DArray<Attribute> attribute,
+		DArray<Vec3f>& initialPos,
+		DArray<Quat1f>& initialRotQuat,
+		DArray<Vec3f>& pos,
+		DArray<Quat1f>& rotQuat,
+		DArray<Mat3f>& rotMat,
+		DArray<Mat3f>& inertia,
+		DArray<Vec3f>& velocity,
+		DArray<Vec3f>& angular_velocity,
+		DArray<Mat3f>& inertia_init,
+		DArray<Mat3f> preconditioner,
+		DArray<Vec3f> gradient,
+		float stepSize,
+		float dt
+	)
+	{
+		cuExecute(velocity.size(),
+			SF_updateVelocityPrimal,
+			attribute,
+			velocity,
+			angular_velocity,
+			preconditioner,
+			gradient,
+			stepSize);
+
+		cuExecute(pos.size(),
+			SF_updateGesturePrimal,
+			attribute,
+			initialPos,
+			pos,
+			initialRotQuat,
+			rotQuat,
+			rotMat,
+			inertia,
+			velocity,
+			angular_velocity,
+			inertia_init,
+			dt);
+	}
+
 
 }

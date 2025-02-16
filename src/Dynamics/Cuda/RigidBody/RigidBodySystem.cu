@@ -10,6 +10,7 @@
 #include "RigidBody/Module/PJSConstraintSolver.h"
 #include "RigidBody/Module/PJSoftConstraintSolver.h"
 #include "RigidBody/Module/PCGConstraintSolver.h"
+#include "RigidBody/Module/PrimalConstraintSolver.h"
 #include "RigidBody/Module/CarDriver.h"
 
 //Module headers
@@ -43,12 +44,12 @@ namespace dyno
 
 		this->animationPipeline()->pushModule(merge);
 
-		auto iterSolver = std::make_shared<TJSoftConstraintSolver<TDataType>>();
+		auto iterSolver = std::make_shared<PrimalConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(iterSolver->inTimeStep());
 		this->varFrictionEnabled()->connect(iterSolver->varFrictionEnabled());
 		this->varGravityEnabled()->connect(iterSolver->varGravityEnabled());
 		this->varGravityValue()->connect(iterSolver->varGravityValue());
-		this->varFrictionCoefficient()->connect(iterSolver->varFrictionCoefficient());
+		//this->varFrictionCoefficient()->connect(iterSolver->varFrictionCoefficient());
 		this->varSlop()->connect(iterSolver->varSlop());
 		this->stateMass()->connect(iterSolver->inMass());
 		
@@ -66,7 +67,7 @@ namespace dyno
 		this->animationPipeline()->pushModule(iterSolver);
 
 
-		this->setDt(0.016f);
+		this->setDt(0.005f);
 	}
 
 	template<typename TDataType>
