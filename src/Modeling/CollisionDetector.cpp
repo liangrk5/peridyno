@@ -8,6 +8,7 @@
 #include "BasicShapes/CubeModel.h"
 #include "BasicShapes/SphereModel.h"
 #include "BasicShapes/CapsuleModel.h"
+#include "BasicShapes/MedalConeModel.h"
 
 #include "GLPointVisualModule.h"
 #include "GLWireframeVisualModule.h"
@@ -157,6 +158,15 @@ namespace dyno
 
 			//CollisionDetection<Real>::request(manifold, sA, sB);
 			CollisionDetection<Real>::request(manifold, seg, sB, radius1, 0.f);
+		}
+		else if (shapeA->getShapeType() == BasicShapeType::MEDALCONE && shapeB->getShapeType() == BasicShapeType::MEDALCONE)
+		{
+			auto modelA = dynamic_cast<MedalConeModel<TDataType>*>(shapeA);
+			auto modelB = dynamic_cast<MedalConeModel<TDataType>*>(shapeB);
+
+			auto sA = modelA->outMedalCone()->getValue();
+			auto sB = modelB->outMedalCone()->getValue();
+			CollisionDetection<Real>::request(manifold, sA, sB);
 		}
 		else
 			std::cout << "Not supported yet" << std::endl;

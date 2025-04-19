@@ -3182,27 +3182,157 @@ namespace dyno
 
 
     template<typename Real>
+    DYN_FUNC Real projectPointToSeg(const TSegment3D<Real>& segment, const Vec3f& point)
+    {
+        Vec3f l = point - segment.v0;
+        Vec3f dir = segment.v1 - segment.v0;
+        if (dir.normSquared() < REAL_EPSILON_SQUARED)
+        {
+            return 0.0;
+        }
+
+        Real t = l.dot(dir) / dir.normSquared();
+
+        return t;
+    }
+    
+    template<typename Real>
     DYN_FUNC void CollisionDetection<Real>::request(Manifold& m, const Capsule3D& cap0, const Capsule3D& cap1)
     {
         m.contactCount = 0;
+        Real parallel_tolerance = 0.9998;
 
-        Segment3D s0(cap0.centerline());
-        Segment3D s1(cap1.centerline());
-        Real r0 = cap0.radius + cap1.radius;
+        Segment3D seg1(cap0.centerline());
+        Segment3D seg2(cap1.centerline());
 
-        // From cap0 to cap1
-        Segment3D dir = s0.proximity(s1);
+        Vec3f positionOffset = (cap0.center + cap1.center) * 0.5;
 
-        dir = Point3D(dir.endPoint()) - Point3D(dir.startPoint());
+        //positionOffset = Vec3f(0);
 
-        Real sMax = dir.direction().norm() - r0;
-        if (sMax >= 0)
-            return;
+        Vec3f p0 = seg1.startPoint() - positionOffset;
+        Vec3f p1 = seg1.endPoint() - positionOffset;
+        Vec3f pseg = p1 - p0;
+        Real lengthsq1 = pseg.normSquared();
+        Vec3f dir1 = lengthsq1 > EPSILON ? pseg / pseg.norm() : Vec3f(0.0f);
 
-        m.normal = dir.direction().normalize();
-        m.contacts[0].penetration = sMax;
-        m.contacts[0].position = dir.v0 + (cap0.radius + sMax) * m.normal;
-        m.contactCount = 1;
+
+        Vec3f q0 = seg2.startPoint() - positionOffset;
+        Vec3f q1 = seg2.endPoint() - positionOffset;
+        Vec3f qseg = q1 - q0;
+        Real lengthsq2 = qseg.normSquared();
+        Vec3f dir2 = lengthsq2 > EPSILON ? qseg / qseg.norm() : Vec3f(0.0f);
+        Real sumRadius = cap0.radius + cap1.radius + EPSILON;
+        Real sumRadius2 = sumRadius * sumRadius;
+        Real s, t;
+
+        Segment3D s1(p0, p1);
+        Segment3D s2(q0, q1);
+        Segment3D closeSeg = s1.proximity(s2);
+        s = s1.parameter(closeSeg.startPoint());
+        t = s2.parameter(closeSeg.endPoint());
+        Real sqdis = closeSeg.length();
+        Real sqdis2 = closeSeg.lengthSquared();
+
+        if (sqdis2 <= sumRadius2)
+        {
+            Real cosValue = abs(dir1.dot(dir2));
+            if (cosValue >= parallel_tolerance)
+            {
+                Real t_p0_q = projectPointToSeg(s2, p0);
+                Real t_p1_q = projectPointToSeg(s2, p1);
+                Real t_q0_p = projectPointToSeg(s1, q0);
+                Real t_q1_p = projectPointToSeg(s1, q1);
+
+
+                if (t_p0_q >= 0 && t_p0_q <= 1)
+                {
+                    Vec3f proj_p0_q = q0 + t_p0_q * qseg;
+                    Vec3f v = proj_p0_q - p0;
+                    Real sqDis = v.norm();
+
+
+                    if (sqDis > EPSILON && sqDis <= sumRadius)
+                    {
+                        Real dist = sqDis;
+                        Real pen = sumRadius - dist;
+                        Vec3f normal = v / dist;
+                        Vec3f point = p0 + normal * cap0.radius;
+                        m.normal = normal;
+                        m.contacts[m.contactCount].penetration = -pen;
+                        m.contacts[m.contactCount].position = point + positionOffset;
+                        m.contactCount++;
+                    }
+                }
+
+                if (t_p1_q >= 0 && t_p1_q <= 1)
+                {
+                    Vec3f proj_p1_q = q0 + t_p1_q * qseg;
+                    Vec3f v = proj_p1_q - p1;
+                    Real sqDis = v.norm();
+
+
+                    if (sqDis > EPSILON && sqDis <= sumRadius)
+                    {
+                        Real dist = sqDis;
+                        Real pen = sumRadius - dist;
+                        Vec3f normal = v / dist;
+                        Vec3f point = p1 + normal * cap0.radius;
+                        m.normal = normal;
+                        m.contacts[m.contactCount].penetration = -pen;
+                        m.contacts[m.contactCount].position = point + positionOffset;
+                        m.contactCount++;
+                    }
+                }
+
+                if (t_q0_p >= 0 && t_q0_p <= 1)
+                {
+                    Vec3f proj_q0_p = p0 + t_q0_p * pseg;
+                    Vec3f v = q0 - proj_q0_p;
+                    Real sqDis = v.norm();
+
+                    if (sqDis > EPSILON && sqDis <= sumRadius)
+                    {
+                        Real dist = sqDis;
+                        Real pen = sumRadius - dist;
+                        Vec3f normal = v / dist;
+                        Vec3f point = proj_q0_p + normal * cap0.radius;
+                        m.normal = normal;
+                        m.contacts[m.contactCount].penetration = -pen;
+                        m.contacts[m.contactCount].position = point + positionOffset;
+                        m.contactCount++;
+                    }
+                }
+                if (t_q1_p >= 0 && t_q1_p <= 1)
+                {
+                    Vec3f proj_q1_p = p0 + t_q1_p * pseg;
+                    Vec3f v = q1 - proj_q1_p;
+                    Real sqDis = v.norm();
+
+                    if (sqDis > EPSILON && sqDis <= sumRadius)
+                    {
+                        Real dist = sqDis;
+                        Real pen = sumRadius - dist;
+                        Vec3f normal = v / dist;
+                        Vec3f point = proj_q1_p + normal * cap0.radius;
+                        m.normal = normal;
+                        m.contacts[m.contactCount].penetration = -pen;
+                        m.contacts[m.contactCount].position = point + positionOffset;
+                        m.contactCount++;
+                    }
+                }
+            }
+            else {
+                Vec3f normal = closeSeg.direction() / closeSeg.length();
+                Vec3f pointA = closeSeg.startPoint() + normal * cap0.radius;
+                Vec3f pointB = closeSeg.endPoint() - normal * cap1.radius;
+                Vec3f contactPoint = (pointA + pointB) / 2;
+                Real pen = sumRadius - closeSeg.length();
+                m.normal = normal;
+                m.contacts[0].penetration = -pen;
+                m.contacts[0].position = contactPoint + positionOffset;
+                m.contactCount++;
+            }
+        }
     }
 
 
@@ -5497,5 +5627,169 @@ namespace dyno
     {
         request(m, sphere, tri);
         m.normal *= -1;
+    }
+
+    /*
+    [a b [s  [e
+    c d]  t]  f]  
+    */
+    template<typename Real>
+    DYN_FUNC bool solveLinearSystem22(Real a, Real b, Real c, Real d, Real e, Real f, Real& s, Real& t)
+    {
+        Mat2f mat(a, b, c, d);
+        Vec2f vec(e, f);
+
+        if (abs(mat.determinant()) < EPSILON)
+        {
+            return false;
+        }
+
+        Vec2f result = mat.inverse() * vec;
+        s = result[0];
+        t = result[1];
+    }
+
+    template<typename Real>
+    DYN_FUNC Real minimizeQuardratic1D(Real a, Real b, Real c, Real& t_min)
+    {
+        if (std::abs(a) < EPSILON) {
+            if (b > 0.0) { 
+                t_min = 0.0;
+                return c;
+            }
+            else {
+                t_min = 1.0;
+                return a + b + c; 
+            }
+        }
+
+
+        double t_vertex = -b / (2.0 * a);
+
+
+        t_min = clamp(t_vertex, 0.0, 1.0);
+
+ 
+        double f0 = c; // f(0)
+        double f1 = a + b + c; // f(1)
+        double f_tmin = a * t_min * t_min + b * t_min + c;
+
+
+        if (f_tmin <= f0 && f_tmin <= f1) {
+            return f_tmin; 
+        }
+        else if (f0 <= f1) {
+            t_min = 0.0;
+            return f0;
+        }
+        else {
+            t_min = 1.0;
+            return f1; 
+        }
+    }
+
+    template<typename Real>
+    DYN_FUNC void CollisionDetection<Real>::request(Manifold& m, MedalCone3D& medalcone1, MedalCone3D& medalcone2)
+    {
+        m.contactCount = 0;
+
+        Vec3f positionOffset = (medalcone1.center + medalcone2.center) * Real(0.5);
+
+        medalcone1.center = medalcone1.center - positionOffset;
+        medalcone2.center = medalcone2.center - positionOffset;
+
+        Segment3D seg1(medalcone1.centerline());
+        Segment3D seg2(medalcone2.centerline());
+
+        Vec3f vA = seg1.direction();
+        Vec3f vB = seg2.direction();
+        Vec3f w0 = seg1.startPoint() - seg2.startPoint();
+
+        Real drA = medalcone1.radiusB - medalcone1.radiusA;
+        Real drB = medalcone2.radiusB - medalcone2.radiusA;
+        Real r0Sum = medalcone1.radiusA + medalcone2.radiusA;
+
+        Real C_ss = vA.dot(vA) - drA * drA;
+        Real C_tt = vB.dot(vB) - drB * drB;
+        Real C_st = -2.0 * vA.dot(vB) - 2.0 * drA * drB;
+        Real C_s = 2.0 * vA.dot(w0) - 2.0 * drA * (r0Sum);
+        Real C_t = -2.0 * vB.dot(w0) - 2.0 * drB * (r0Sum);
+        Real C_0 = w0.dot(w0) - r0Sum * r0Sum;
+
+        auto evaluateH = [&](Real s, Real t) {
+            return C_ss * s * s + C_tt * t * t + C_st * s * t + C_s * s + C_t * t + C_0;
+        };
+
+        Real min_H = C_0;
+
+        Real s_unc = 0, t_unc = 0;
+
+        if (solveLinearSystem22(2.0f * C_ss, C_st, C_st, 2.0f * C_tt, -C_s, -C_t, s_unc, t_unc))
+        {
+            if (s_unc > EPSILON && s_unc < 1.0 - EPSILON && t_unc > EPSILON && t_unc < 1.0 - EPSILON)
+            {
+                if (min_H > evaluateH(s_unc, t_unc))
+                {
+                    min_H = evaluateH(s_unc, t_unc);
+                }
+            }
+        }
+
+        Real s_bound, t_bound;
+        Real h_bound;
+
+        // H(0,t)
+        h_bound = minimizeQuardratic1D(C_tt, C_t, C_0, t_bound);
+        if (min_H > h_bound)
+        {
+            min_H = h_bound;
+            s_unc = 0;
+            t_unc = t_bound;
+        }
+
+        // H(1,t)
+        h_bound = minimizeQuardratic1D(C_tt, C_st+C_t, C_ss+C_s+C_0, t_bound);
+        if (min_H > h_bound)
+        {
+            min_H = h_bound;
+            s_unc = 1;
+            t_unc = t_bound;
+        }
+
+        // H(s,0)
+        h_bound = minimizeQuardratic1D(C_ss, C_s, C_0, s_bound);
+        if (min_H > h_bound)
+        {
+            min_H = h_bound;
+            s_unc = s_bound;
+            t_unc = 0;
+        }
+
+        // H(s,1)
+        h_bound = minimizeQuardratic1D(C_ss, C_st+C_s, C_tt+C_t+C_0, s_bound);
+        if (min_H > h_bound)
+        {
+            min_H = h_bound;
+            s_unc = s_bound;
+            t_unc = 1;
+        }
+        //printf("%lf\n", min_H);
+        if (min_H <= EPSILON)
+        {
+            Vec3f proj1 = seg1.startPoint() + vA * s_unc;
+            Vec3f proj2 = seg2.startPoint() + vB * t_unc;
+            Real r_proj1 = medalcone1.radiusA + drA * s_unc;
+            Real r_proj2 = medalcone2.radiusA + drB * t_unc;
+            Vec3f normal = (proj2 - proj1);
+            normal.normalize();
+
+            m.contactCount = 1;
+            m.contacts[0].penetration = (proj2-proj1).norm() - r_proj1 - r_proj2;
+            m.contacts[0].position = proj1 + normal * (medalcone1.radiusA + s_unc * drA) + positionOffset;
+        } 
+
+        medalcone1.center = medalcone1.center + positionOffset;
+        medalcone2.center = medalcone2.center + positionOffset;
+
     }
 }

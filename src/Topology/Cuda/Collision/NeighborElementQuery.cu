@@ -358,11 +358,11 @@ namespace dyno
 
 			//cap1.radius += dHat;
 			//cap2.radius += dHat;
-			//CollisionDetection<Real>::request(manifold, cap1, cap2);
+			CollisionDetection<Real>::request(manifold, cap1, cap2);
 
-			Segment3D seg1 = cap1.centerline(); Real radius1 = cap1.radius;
-			Segment3D seg2 = cap2.centerline(); Real radius2 = cap2.radius;
-			CollisionDetection<Real>::request(manifold, seg1, seg2, radius1 + dHat, radius2 + dHat);
+			//Segment3D seg1 = cap1.centerline(); Real radius1 = cap1.radius;
+			//Segment3D seg2 = cap2.centerline(); Real radius2 = cap2.radius;
+			//CollisionDetection<Real>::request(manifold, seg1, seg2, radius1 + dHat, radius2 + dHat);
 			
 		}
 		else if (eleType_i == ET_BOX && eleType_j == ET_CAPSULE && checkCollision(mask_i, mask_j, ET_BOX, ET_CAPSULE))			//box-capsule

@@ -635,6 +635,38 @@ namespace dyno
 		Quat<Real> rotation;
 	};
 
+	template<typename Real>
+	class TMedalCone3D
+	{
+	public:
+		typedef  Vector<Real, 2> Coord2D;
+		typedef  Vector<Real, 3> Coord3D;
+	public:
+		DYN_FUNC TMedalCone3D();
+		DYN_FUNC TMedalCone3D(const Coord3D& c, const Quat<Real>& q, const Coord3D& pA, const Coord3D& pB, const Real& rA, const Real& rB);
+		DYN_FUNC TMedalCone3D(const TMedalCone3D<Real>& medalcone);
+
+		DYN_FUNC Real volume() const;
+
+		DYN_FUNC bool isValid() const;
+		DYN_FUNC TAlignedBox3D<Real> aabb() const;
+
+		DYN_FUNC inline Coord3D startPoint() const { return center + rotation.rotate(pointA); }
+		DYN_FUNC inline Coord3D endPoint() const { return center + rotation.rotate(pointB); }
+
+		DYN_FUNC inline TSegment3D<Real> centerline() const { return TSegment3D<Real>(startPoint(), endPoint()); }
+
+
+		Coord3D center;
+		Quat<Real> rotation;
+		Real radiusA;
+		Real radiusB;
+		Coord3D pointA;
+		Coord3D pointB;
+	};
+
+
+
 	// The centerline is set to align with the Y-axis in default 
 	template<typename Real>
 	class TCapsule3D

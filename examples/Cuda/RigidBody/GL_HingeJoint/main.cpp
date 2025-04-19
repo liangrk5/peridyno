@@ -28,15 +28,15 @@ std::shared_ptr<SceneGraph> creatCar()
 	auto rigid = scn->addNode(std::make_shared<RigidBodySystem<DataType3f>>());
 
 	RigidBodyInfo rA;
-	SphereInfo box;
+	CapsuleInfo box;
 	box.center = Vec3f(0.0f);
 	//box.halfLength = 2.0 * Vec3f(0.02, 0.08, 0.02);
-	//box.halfLength = 0.1;
+	box.halfLength = 0.1;
 	box.radius = 0.15;
 	box.rot = Quat1f(M_PI / 2, Vec3f(1, 0, 0));
 	rA.position = 2.0 * Vec3f(-1.0, 0.2, 0.5);
 	rA.linearVelocity = Vec3f(1, 0, 0);
-	auto oldBoxActor = rigid->addSphere(box, rA);
+	auto oldBoxActor = rigid->addCapsule(box, rA);
 	rA.linearVelocity = Vec3f(0, 0, 0);
 
 	for (int i = 0; i < 60; i++)
@@ -45,7 +45,7 @@ std::shared_ptr<SceneGraph> creatCar()
 		rB.position = rA.position + 2.0 * Vec3f(0.0, 0.2, 0);
 		rB.bodyId = i + 1;
 
-		auto newBoxActor = rigid->addSphere(box, rB);
+		auto newBoxActor = rigid->addCapsule(box, rB);
 		auto& hingeJoint = rigid->createHingeJoint(oldBoxActor, newBoxActor);
 		hingeJoint.setAnchorPoint((rA.position + rB.position) / 2);
 		hingeJoint.setAxis(Vec3f(0, 0, 1));

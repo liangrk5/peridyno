@@ -3302,6 +3302,52 @@ namespace dyno
 		return abox;
 	}
 
+	template<typename Real>
+	DYN_FUNC TMedalCone3D<Real>::TMedalCone3D()
+	{
+		center = Coord(0);
+		rotation = Quat<Real>();
+		radiusA = 1.0;
+		radiusB = 1.0;
+		pointA = Coord(0, 1, 0);
+		pointB = Coord(0, -1, 0);
+	}
+
+	template<typename Real>
+	DYN_FUNC TMedalCone3D<Real>::TMedalCone3D(
+		const Coord3D& c,
+		const Quat<Real>& q,
+		const Coord3D& pA,
+		const Coord3D& pB,
+		const Real& rA,
+		const Real& rB)
+		: center(c), rotation(q), pointA(pA), pointB(pB), radiusA(rA), radiusB(rB)
+	{
+	}
+
+	template<typename Real>
+	DYN_FUNC TMedalCone3D<Real>::TMedalCone3D(const TMedalCone3D& medalcone)
+	{
+		center = medalcone.center;
+		rotation = medalcone.rotation;
+		pointA = medalcone.pointA;
+		pointB = medalcone.pointB;
+		radiusA = medalcone.radiusA;
+		radiusB = medalcone.radiusB;
+	}
+
+	template<typename Real>
+	DYN_FUNC Real TMedalCone3D<Real>::volume() const
+	{
+		return Real(1.0);
+	}
+
+	template<typename Real>
+	DYN_FUNC bool TMedalCone3D<Real>::isValid() const
+	{
+		return (pointA - pointB).norm() >= EPSILON && radiusA >= EPSILON && radiusB >= EPSILON;
+	}
+
 
 	template<typename Real>
 	DYN_FUNC TCapsule3D<Real>::TCapsule3D()

@@ -81,6 +81,7 @@ namespace dyno
         using OBox3D = TOrientedBox3D<Real>;
         using Capsule3D = TCapsule3D<Real>;
         using Triangle3D = TTriangle3D<Real>;
+        using MedalCone3D = TMedalCone3D<Real>;
 
         using Manifold = TManifold<Real>;
         using SeparationData = TSeparationData<Real>;
@@ -190,7 +191,7 @@ namespace dyno
         DYN_FUNC static void request(Manifold& m, const Capsule3D& cap, const Sphere3D& sphere);
         
         //=========================================
-        DYN_FUNC static void request(Manifold& m, const Capsule3D& cap0, const Capsule3D& cap1);//untested
+        DYN_FUNC static void request(Manifold& m, const Capsule3D& cap0, const Capsule3D& cap1);
 
         DYN_FUNC static void request(Manifold& m, const Sphere3D& sphere, const Triangle3D& tri);//untested
         DYN_FUNC static void request(Manifold& m, const Triangle3D& tri, const Sphere3D& sphere);//untested
@@ -211,6 +212,8 @@ namespace dyno
         DYN_FUNC static void request(Manifold& m, const OBox3D& box, const Triangle3D& tri);//unfinished
 
         //=========================================
+
+        DYN_FUNC static void request(Manifold& m, MedalCone3D& medalcone1, MedalCone3D& medalcone2);
 
 
     private:
