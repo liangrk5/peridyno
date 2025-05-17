@@ -68,6 +68,20 @@ protected:
 		}
 
 		boxInGlobal.clear();
+
+		//std::cout << event.actionType << std::endl;
+
+		//if (event.actionType == AT_UNKOWN)
+		//	printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+
+		//if (event.actionType == AT_RELEASE)
+		//	printf("111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111");
+
+		//if (event.actionType == AT_PRESS)
+		//	printf("222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222");
+
+		//if (event.actionType == AT_REPEAT)
+		//	printf("333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333");
 	}
 };
 
@@ -85,7 +99,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 		for (int j = 0; j < i + 1; j++)
 		{
 			rigidBody.position = 0.5f * Vec3f(0.5f, 1.1 - 0.13 * i, 0.12f + 0.21 * j + 0.1 * (8 - i));
-			
+
 			rigid->addBox(box, rigidBody);
 		}
 

@@ -67,7 +67,7 @@ namespace dyno
 
 		uint N = 0;
 		if (texMesh != NULL);
-			N = texMesh->shapes().size();
+		N = texMesh->shapes().size();
 
 		CArrayList<Transform3f> tms;
 		CArray<uint> instanceNum(N);
