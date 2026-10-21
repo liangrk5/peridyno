@@ -62,6 +62,17 @@ namespace dyno
 
 		void construct(const DArray<AABB>& aabb);
 
+		/**
+		 * @brief Update the bounding boxes without changing the tree topology.
+		 *	The number and order of the input boxes must be the same as those used by the last call to construct().
+		 */
+		void refit(const DArray<AABB>& aabb);
+
+		/**
+		 * @brief Number of primitives stored in the tree, the tree contains 2 * size() - 1 nodes
+		 */
+		CPU_FUNC uint size() const { return mSortedObjectIds.size(); }
+
 		GPU_FUNC uint requestIntersectionNumber(const AABB& queryAABB) const;
 		GPU_FUNC void requestIntersectionIds(List<int>& ids, const AABB& queryAABB) const;
 
@@ -70,6 +81,9 @@ namespace dyno
 		GPU_FUNC void requestIntersectionIds(List<int>& ids, const int queryId, const AABB& queryAABB, bool (*compare)(const AABB&, const AABB&), bool (*filter)(const int, const int)) const;
 
 		GPU_FUNC NodePtr getRoot() const { return &mAllNodes[0]; }
+
+		GPU_FUNC Node getNode(const uint idx) const { return mAllNodes[idx]; }
+		GPU_FUNC uint leafNumber() const { return mSortedObjectIds.size(); }
 
 		GPU_FUNC AABB getAABB(const uint idx) const { return mSortedAABBs[idx]; }
 		GPU_FUNC uint getObjectIdx(const uint idx) const { return mSortedObjectIds[idx]; }

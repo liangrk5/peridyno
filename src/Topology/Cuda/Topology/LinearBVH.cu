@@ -9,6 +9,7 @@
 #include "Timer.h"
 
 #include <vector>
+#include <cassert>
 
 namespace dyno
 {
@@ -325,6 +326,42 @@ namespace dyno
 			mSortedAABBs,
 			aabb,
 			mMortonCodes,
+			mSortedObjectIds);
+
+		mFlags.reset();
+		cuExecute(num,
+			LBVH_CalculateBoundingBox,
+			mSortedAABBs,
+			mAllNodes,
+			mFlags);
+	}
+
+	template<typename AABB>
+	__global__ void LBVH_SetupLeafAABBs(
+		DArray<AABB> sortedAABBs,
+		DArray<AABB> aabbs,
+		DArray<uint> sortedObjectIds)
+	{
+		uint i = threadIdx.x + (blockIdx.x * blockDim.x);
+		uint N = sortedObjectIds.size();
+
+		if (i >= N) return;
+
+		sortedAABBs[i + N - 1] = aabbs[sortedObjectIds[i]];
+	}
+
+	template<typename TDataType>
+	void LinearBVH<TDataType>::refit(const DArray<AABB>& aabb)
+	{
+		uint num = aabb.size();
+		assert(num == mSortedObjectIds.size());
+
+		if (num == 0) return;
+
+		cuExecute(num,
+			LBVH_SetupLeafAABBs,
+			mSortedAABBs,
+			aabb,
 			mSortedObjectIds);
 
 		mFlags.reset();
