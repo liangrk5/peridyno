@@ -124,6 +124,7 @@ namespace dyno
 		void findPairs(uint elementNum);
 		void narrowPhase(uint elementNum);
 		void writeLegacyContacts();
+		void updateMeshEdges(DArray<Topology::Triangle>& indices);
 
 		// Shape data
 		DArray<AABB> mShapeAABB;		// AABBs of all shapes, elements first, then environment triangles
@@ -142,6 +143,7 @@ namespace dyno
 
 		// Environment mesh in world space
 		DArray<Triangle3D> mMeshTriangles;
+		DArray<int> mMeshEdgeActive;		// per triangle edge, 0 for internal edges
 
 		// Pairs
 		DArray<unsigned long long> mPairKeys;

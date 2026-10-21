@@ -488,6 +488,7 @@ namespace dyno
 		DArray<MedialCone3D> cones;
 		DArray<MedialSlab3D> slabs;
 		DArray<Triangle3D> meshTris;
+		DArray<int> meshEdgeActive;		// per triangle edge, 0 for internal edges of the environment mesh
 		DArray<int> shapeBody;
 		ElementOffset offset;
 		uint elementNum;
@@ -633,6 +634,140 @@ namespace dyno
 		count = 4;
 	}
 
+	/**
+	 * Contacts against an internal edge or vertex of the environment mesh take the face normal, otherwise a shape
+	 * sliding over a flat tessellated floor would bump into the edges between triangles.
+	 */
+	GPU_FUNC inline void RCD_FilterInternalEdges(
+		TManifold<Real>& m,
+		const Triangle3D& tri,
+		const DArray<int>& edgeActive,
+		uint triId)
+	{
+		Vec3f e0 = tri.v[1] - tri.v[0];
+		Vec3f e1 = tri.v[2] - tri.v[0];
+		Vec3f f = e0.cross(e1);
+		Real area2 = f.norm();
+		if (area2 < REAL_EPSILON) return;
+		f /= area2;
+
+		// Already a face contact
+		if (abs(f.dot(m.normal)) > Real(0.999)) return;
+
+		// Feature of the deepest point
+		int deepest = 0;
+		for (int i = 1; i < m.contactCount; i++)
+			if (m.contacts[i].penetration < m.contacts[deepest].penetration) deepest = i;
+
+		Vec3f p = m.contacts[deepest].position - tri.v[0];
+		Real d00 = e0.dot(e0), d01 = e0.dot(e1), d11 = e1.dot(e1);
+		Real d20 = p.dot(e0), d21 = p.dot(e1);
+		Real denom = d00 * d11 - d01 * d01;
+		if (abs(denom) < REAL_EPSILON) return;
+		Real b1 = (d11 * d20 - d01 * d21) / denom;
+		Real b2 = (d00 * d21 - d01 * d20) / denom;
+		Real bary[3] = { Real(1) - b1 - b2, b1, b2 };
+
+		const Real eps = Real(1e-3);
+		int zeros = 0;
+		int zeroId[3];
+		for (int k = 0; k < 3; k++)
+			if (bary[k] < eps) zeroId[zeros++] = k;
+
+		// Edge e runs from v[e] to v[(e + 1) % 3] and is opposite to vertex (e + 2) % 3
+		bool internal = false;
+		if (zeros == 1)
+		{
+			int e = (zeroId[0] + 1) % 3;
+			internal = edgeActive[3 * triId + e] == 0;
+		}
+		else if (zeros == 2)
+		{
+			// vertex opposite to the two zero coordinates, shared by edges (k + 2) % 3 and k
+			int k = 3 - zeroId[0] - zeroId[1];
+			internal = edgeActive[3 * triId + k] == 0 && edgeActive[3 * triId + (k + 2) % 3] == 0;
+		}
+
+		if (!internal) return;
+
+		Vec3f n = f.dot(m.normal) > 0 ? f : -f;
+		Real c = n.dot(m.normal);
+		m.normal = n;
+		for (int i = 0; i < m.contactCount; i++)
+			m.contacts[i].penetration *= c;
+	}
+
+	/**
+	 * An edge of the environment mesh is active, i.e. may produce edge normals, when it is a boundary or
+	 * non-manifold edge, or a convex edge sharper than a few degrees. Flat and concave edges are internal.
+	 */
+	__global__ void RCD_MeshEdgeKeys(
+		DArray<unsigned long long> keys,
+		DArray<uint> ids,
+		DArray<Topology::Triangle> indices)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= indices.size()) return;
+
+		auto t = indices[tId];
+		for (int e = 0; e < 3; e++)
+		{
+			uint a = t[e];
+			uint b = t[(e + 1) % 3];
+			uint lo = a < b ? a : b;
+			uint hi = a < b ? b : a;
+			keys[3 * tId + e] = ((unsigned long long)lo << 32) | hi;
+			ids[3 * tId + e] = 3 * tId + e;
+		}
+	}
+
+	__global__ void RCD_MeshEdgeFlags(
+		DArray<int> active,
+		DArray<unsigned long long> keys,
+		DArray<uint> ids,
+		DArray<Triangle3D> tris)
+	{
+		uint i = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (i >= keys.size()) return;
+
+		unsigned long long k = keys[i];
+		uint first = i;
+		while (first > 0 && keys[first - 1] == k) first--;
+		uint last = i + 1;
+		while (last < keys.size() && keys[last] == k) last++;
+
+		uint self = ids[i];
+		if (last - first != 2)
+		{
+			active[self] = 1;
+			return;
+		}
+
+		uint other = ids[first == i ? i + 1 : first];
+		Triangle3D t = tris[self / 3];
+		Triangle3D u = tris[other / 3];
+
+		Vec3f nt = (t.v[1] - t.v[0]).cross(t.v[2] - t.v[0]);
+		Vec3f nu = (u.v[1] - u.v[0]).cross(u.v[2] - u.v[0]);
+		Real lt = nt.norm(), lu = nu.norm();
+		if (lt < REAL_EPSILON || lu < REAL_EPSILON)
+		{
+			active[self] = 1;
+			return;
+		}
+		nt /= lt;
+		nu /= lu;
+
+		// vertex of u that is not on the shared edge
+		Vec3f w = u.v[(other % 3 + 2) % 3];
+		Vec3f a = t.v[self % 3];
+		Real height = nt.dot(w - a);
+
+		bool flat = abs(nt.dot(nu)) > Real(0.9986);	// within about 3 degrees
+		bool concave = height > Real(0);
+		active[self] = (flat || concave) ? 0 : 1;
+	}
+
 	template<int TA, int TB>
 	__global__ void RCD_NarrowPhase(
 		DArray<TContactManifold<Real>> manifolds,
@@ -671,6 +806,9 @@ namespace dyno
 				uint tmp = idA; idA = idB; idB = tmp;
 				int t = bodyA; bodyA = bodyB; bodyB = t;
 			}
+
+			if (idB >= shapes.elementNum)
+				RCD_FilterInternalEdges(m, shapes.meshTris[idB - shapes.elementNum], shapes.meshEdgeActive, idB - shapes.elementNum);
 
 			int selected[4];
 			int count = 0;
@@ -741,6 +879,7 @@ namespace dyno
 		shapes.cones = topo->medialConesInGlobal();
 		shapes.slabs = topo->medialSlabsInGlobal();
 		shapes.meshTris = mMeshTriangles;
+		shapes.meshEdgeActive = mMeshEdgeActive;
 		shapes.shapeBody = mShapeBody;
 		shapes.offset = topo->calculateElementOffset();
 		shapes.elementNum = elementNum;
@@ -854,6 +993,29 @@ namespace dyno
 	}
 
 	template<typename TDataType>
+	void RigidContactDetection<TDataType>::updateMeshEdges(DArray<Topology::Triangle>& indices)
+	{
+		uint edgeNum = 3 * indices.size();
+
+		DArray<unsigned long long> keys;
+		DArray<uint> ids;
+		keys.resize(edgeNum);
+		ids.resize(edgeNum);
+		cuExecute(indices.size(), RCD_MeshEdgeKeys, keys, ids, indices);
+
+		thrust::sort_by_key(thrust::device,
+			thrust::device_ptr<unsigned long long>(keys.begin()),
+			thrust::device_ptr<unsigned long long>(keys.begin()) + edgeNum,
+			thrust::device_ptr<uint>(ids.begin()));
+
+		mMeshEdgeActive.resize(edgeNum);
+		cuExecute(edgeNum, RCD_MeshEdgeFlags, mMeshEdgeActive, keys, ids, mMeshTriangles);
+
+		keys.clear();
+		ids.clear();
+	}
+
+	template<typename TDataType>
 	void RigidContactDetection<TDataType>::compute()
 	{
 		auto topo = this->inDiscreteElements()->getDataPtr();
@@ -876,7 +1038,10 @@ namespace dyno
 			{
 				mMeshTriangles.resize(meshTriNum);
 				if (meshTriNum > 0)
+				{
 					cuExecute(meshTriNum, RCD_SetupMeshTriangles, mMeshTriangles, ts->getPoints(), indices);
+					updateMeshEdges(indices);
+				}
 				mStaticDirty = true;
 			}
 		}
