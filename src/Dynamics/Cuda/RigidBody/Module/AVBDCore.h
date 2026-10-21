@@ -328,6 +328,365 @@ namespace dyno
 		}
 	}
 
+	/******************************************************************************************************************
+	 * Joints
+	 ******************************************************************************************************************/
+
+	enum AVBDJointType
+	{
+		AVBD_JOINT_BALL = 0,		// point lock
+		AVBD_JOINT_HINGE,			// point lock + two angular rows keeping the axes aligned
+		AVBD_JOINT_SLIDER,			// two linear rows across the axis + full angular lock
+		AVBD_JOINT_FIXED,			// point lock + full angular lock
+		AVBD_JOINT_POINT,			// the center of body A is pinned to a world point
+		AVBD_JOINT_DISTANCE			// distance between two anchors
+	};
+
+	/**
+	 * @brief A joint as seen by the AVBD solver. Rows 0-2 are linear, rows 3-5 angular.
+	 */
+	template<typename Real>
+	struct AVBDJoint
+	{
+		static const int MAX_ROWS = 6;
+
+		int type = AVBD_JOINT_BALL;
+
+		int bodyA = -1;
+		int bodyB = -1;				// -1 for the static world
+
+		Vector<Real, 3> rA;			// anchor in the local frame of A
+		Vector<Real, 3> rB;			// anchor in the local frame of B, or in world space when B is the world
+		Vector<Real, 3> axisA;		// hinge and slider axis in the local frame of A
+		Vector<Real, 3> axisB;		// hinge axis in the local frame of B, or in world space when B is the world
+		Quat<Real> qRel;			// target rotation: qA = qB * qRel, or qA = qRel when B is the world
+
+		Real distance = 0;
+
+		Real L = 1;					// length scale turning angular errors into lengths
+		Real mass = 1;				// effective mass, penalties are stored per unit mass
+
+		Real C0[MAX_ROWS];
+		Real penalty[MAX_ROWS];
+		Real lambda[MAX_ROWS];
+	};
+
+	/**
+	 * Constraint values and world-space Jacobians of all rows of a joint at the given poses
+	 */
+	template<typename Real>
+	struct AVBDJointRows
+	{
+		uint mask = 0;			// active rows
+		bool pointLock = false;	// rows 0-2 lock a point, geometric stiffness applies
+
+		Real C[6];
+		Vector<Real, 3> jlA[6];
+		Vector<Real, 3> jaA[6];
+		Vector<Real, 3> jlB[6];
+		Vector<Real, 3> jaB[6];
+
+		Vector<Real, 3> rAw;
+		Vector<Real, 3> rBw;
+	};
+
+	template<typename Real>
+	DYN_FUNC inline void AVBD_EvalJoint(
+		const AVBDJoint<Real>& j,
+		const Vector<Real, 3>& xA,
+		const Quat<Real>& qA,
+		const Vector<Real, 3>& xB,
+		const Quat<Real>& qB,
+		AVBDJointRows<Real>& rows)
+	{
+		typedef Vector<Real, 3> Coord;
+
+		bool hasB = j.bodyB >= 0;
+
+		rows.rAw = j.type == AVBD_JOINT_POINT ? Coord(0) : qA.rotate(j.rA);
+		rows.rBw = hasB ? qB.rotate(j.rB) : Coord(0);
+
+		Coord pA = xA + rows.rAw;
+		Coord pB = hasB ? xB + rows.rBw : j.rB;
+		Coord d = pA - pB;
+
+		rows.mask = 0;
+		rows.pointLock = false;
+
+		auto linearRow = [&](int k, const Coord& n, Real c) {
+			rows.C[k] = c;
+			rows.jlA[k] = n;
+			rows.jaA[k] = rows.rAw.cross(n);
+			rows.jlB[k] = -n;
+			rows.jaB[k] = -rows.rBw.cross(n);
+			rows.mask |= 1u << k;
+		};
+
+		auto angularRow = [&](int k, const Coord& a, Real c) {
+			rows.C[k] = c;
+			rows.jlA[k] = Coord(0);
+			rows.jaA[k] = a;
+			rows.jlB[k] = Coord(0);
+			rows.jaB[k] = -a;
+			rows.mask |= 1u << k;
+		};
+
+		switch (j.type)
+		{
+		case AVBD_JOINT_BALL:
+		case AVBD_JOINT_HINGE:
+		case AVBD_JOINT_FIXED:
+		case AVBD_JOINT_POINT:
+			for (int k = 0; k < 3; k++)
+			{
+				Coord e(0);
+				e[k] = Real(1);
+				linearRow(k, e, d[k]);
+			}
+			rows.pointLock = true;
+			break;
+		case AVBD_JOINT_SLIDER:
+		{
+			Coord a = qA.rotate(j.axisA);
+			Coord t1, t2;
+			AVBD_Basis(a, t1, t2);
+			linearRow(0, t1, t1.dot(d));
+			linearRow(1, t2, t2.dot(d));
+			break;
+		}
+		case AVBD_JOINT_DISTANCE:
+		{
+			Real len = d.norm();
+			Coord n = len > Real(1e-9) ? d / len : Coord(0, 1, 0);
+			linearRow(0, n, len - j.distance);
+			break;
+		}
+		default:
+			break;
+		}
+
+		if (j.type == AVBD_JOINT_FIXED || j.type == AVBD_JOINT_SLIDER)
+		{
+			Quat<Real> target = hasB ? qB * j.qRel : j.qRel;
+			Coord e = AVBD_Sub(qA, target);
+			for (int k = 0; k < 3; k++)
+			{
+				Coord u(0);
+				u[k] = j.L;
+				angularRow(3 + k, u, j.L * e[k]);
+			}
+		}
+		else if (j.type == AVBD_JOINT_HINGE)
+		{
+			Coord aA = qA.rotate(j.axisA);
+			Coord aB = hasB ? qB.rotate(j.axisB) : j.axisB;
+			Coord b1, b2;
+			AVBD_Basis(aA, b1, b2);
+			angularRow(3, b1.cross(aB) * j.L, j.L * b1.dot(aB));
+			angularRow(4, b2.cross(aB) * j.L, j.L * b2.dot(aB));
+		}
+	}
+
+	template<typename Real>
+	DYN_FUNC inline void AVBD_BeginJoint(
+		AVBDJoint<Real>& j,
+		const Vector<Real, 3>* x0,
+		const Quat<Real>* q0,
+		const AVBDParams& p)
+	{
+		typedef Vector<Real, 3> Coord;
+
+		bool hasB = j.bodyB >= 0;
+
+		AVBDJointRows<Real> rows;
+		AVBD_EvalJoint(j, x0[j.bodyA], q0[j.bodyA], hasB ? x0[j.bodyB] : Coord(0), hasB ? q0[j.bodyB] : Quat<Real>::identity(), rows);
+
+		Real kMin = Real(p.penaltyMin) * j.mass;
+		Real kMax = Real(p.penaltyMax) * j.mass;
+		for (int k = 0; k < AVBDJoint<Real>::MAX_ROWS; k++)
+		{
+			j.C0[k] = (rows.mask & (1u << k)) ? rows.C[k] : Real(0);
+			j.lambda[k] *= Real(p.alpha * p.gamma);
+
+			Real pk = j.penalty[k] * Real(p.gamma);
+			j.penalty[k] = pk < kMin ? kMin : (pk > kMax ? kMax : pk);
+		}
+	}
+
+	// Diagonal approximation of the geometric stiffness of a point lock, see the reference implementation of AVBD
+	template<typename Real>
+	DYN_FUNC inline Vector<Real, 3> AVBD_PointGeometricStiffness(const Vector<Real, 3>& r, const Vector<Real, 3>& F)
+	{
+		SquareMatrix<Real, 3> H(0);
+		for (int k = 0; k < 3; k++)
+		{
+			for (int i = 0; i < 3; i++)
+			{
+				H(i, i) -= r[k] * F[k];
+				H(i, k) += r[i] * F[k];
+			}
+		}
+		return Vector<Real, 3>(H.col(0).norm(), H.col(1).norm(), H.col(2).norm());
+	}
+
+	template<typename Real>
+	DYN_FUNC inline void AVBD_StampJoint(
+		const AVBDJoint<Real>& j,
+		bool isA,
+		const Vector<Real, 3>* pos,
+		const Quat<Real>* quat,
+		Real alpha,
+		SquareMatrix<Real, 3>& lhsLin,
+		SquareMatrix<Real, 3>& lhsAng,
+		SquareMatrix<Real, 3>& lhsCross,
+		Vector<Real, 3>& rhsLin,
+		Vector<Real, 3>& rhsAng)
+	{
+		typedef Vector<Real, 3> Coord;
+
+		bool hasB = j.bodyB >= 0;
+
+		AVBDJointRows<Real> rows;
+		AVBD_EvalJoint(j, pos[j.bodyA], quat[j.bodyA], hasB ? pos[j.bodyB] : Coord(0), hasB ? quat[j.bodyB] : Quat<Real>::identity(), rows);
+
+		Coord Fpoint(0);
+		for (int k = 0; k < AVBDJoint<Real>::MAX_ROWS; k++)
+		{
+			if (!(rows.mask & (1u << k))) continue;
+
+			Real K = j.penalty[k];
+			Real F = K * (rows.C[k] - alpha * j.C0[k]) + j.lambda[k];
+			if (k < 3) Fpoint[k] = F;
+
+			Coord jl = isA ? rows.jlA[k] : rows.jlB[k];
+			Coord ja = isA ? rows.jaA[k] : rows.jaB[k];
+
+			for (int u = 0; u < 3; u++)
+			{
+				for (int v = 0; v < 3; v++)
+				{
+					lhsLin(u, v) += K * jl[u] * jl[v];
+					lhsAng(u, v) += K * ja[u] * ja[v];
+					lhsCross(u, v) += K * ja[u] * jl[v];
+				}
+			}
+
+			rhsLin += jl * F;
+			rhsAng += ja * F;
+		}
+
+		if (rows.pointLock)
+		{
+			Coord g = AVBD_PointGeometricStiffness(isA ? rows.rAw : -rows.rBw, Fpoint);
+			for (int k = 0; k < 3; k++)
+				lhsAng(k, k) += g[k];
+		}
+	}
+
+	template<typename Real>
+	DYN_FUNC inline void AVBD_DualJoint(
+		AVBDJoint<Real>& j,
+		const Vector<Real, 3>* pos,
+		const Quat<Real>* quat,
+		const AVBDParams& p)
+	{
+		typedef Vector<Real, 3> Coord;
+
+		bool hasB = j.bodyB >= 0;
+
+		AVBDJointRows<Real> rows;
+		AVBD_EvalJoint(j, pos[j.bodyA], quat[j.bodyA], hasB ? pos[j.bodyB] : Coord(0), hasB ? quat[j.bodyB] : Quat<Real>::identity(), rows);
+
+		Real beta = Real(p.betaLin) * j.mass;
+		Real kMax = Real(p.penaltyMax) * j.mass;
+		for (int k = 0; k < AVBDJoint<Real>::MAX_ROWS; k++)
+		{
+			if (!(rows.mask & (1u << k))) continue;
+
+			Real C = rows.C[k] - Real(p.alpha) * j.C0[k];
+			j.lambda[k] = j.penalty[k] * C + j.lambda[k];
+
+			Real pk = j.penalty[k] + beta * (C < 0 ? -C : C);
+			j.penalty[k] = pk < kMax ? pk : kMax;
+		}
+	}
+
+	/******************************************************************************************************************
+	 * Primal
+	 ******************************************************************************************************************/
+
+	template<typename Real>
+	DYN_FUNC inline void AVBD_StampManifold(
+		const AVBDManifold<Real>& mf,
+		bool isA,
+		const Vector<Real, 3>* pos,
+		const Quat<Real>* quat,
+		const Vector<Real, 3>* x0,
+		const Quat<Real>* q0,
+		Real alpha,
+		SquareMatrix<Real, 3>& lhsLin,
+		SquareMatrix<Real, 3>& lhsAng,
+		SquareMatrix<Real, 3>& lhsCross,
+		Vector<Real, 3>& rhsLin,
+		Vector<Real, 3>& rhsAng)
+	{
+		typedef Vector<Real, 3> Coord;
+
+		int a = mf.bodyA;
+		int b = mf.bodyB;
+		bool hasB = b >= 0;
+
+		Quat<Real> qA = quat[a];
+		Coord dxA = pos[a] - x0[a];
+		Coord dwA = AVBD_Sub(qA, q0[a]);
+
+		Quat<Real> qB = hasB ? quat[b] : Quat<Real>::identity();
+		Coord dxB = hasB ? pos[b] - x0[b] : Coord(0);
+		Coord dwB = hasB ? AVBD_Sub(qB, q0[b]) : Coord(0);
+
+		const Coord basis[3] = { mf.n, mf.t1, mf.t2 };
+		Real sign = isA ? Real(1) : Real(-1);
+
+		for (int i = 0; i < mf.count; i++)
+		{
+			const AVBDContact<Real>& c = mf.c[i];
+
+			Coord rAw = qA.rotate(c.rA);
+			Coord rBw = hasB ? qB.rotate(c.rB) : Coord(0);
+
+			Coord C, F;
+			Real frictionScale, bounds;
+			AVBD_EvalContact(mf, c, rAw, rBw, dxA, dwA, dxB, dwB, alpha, C, F, frictionScale, bounds);
+
+			Coord r = isA ? rAw : rBw;
+			for (int k = 0; k < 3; k++)
+			{
+				Coord jl = basis[k] * sign;
+				Coord ja = r.cross(jl);
+				Real K = c.penalty[k];
+
+				for (int u = 0; u < 3; u++)
+				{
+					for (int v = 0; v < 3; v++)
+					{
+						lhsLin(u, v) += K * jl[u] * jl[v];
+						lhsAng(u, v) += K * ja[u] * ja[v];
+						lhsCross(u, v) += K * ja[u] * jl[v];
+					}
+				}
+
+				rhsLin += jl * F[k];
+				rhsAng += ja * F[k];
+			}
+		}
+	}
+
+	/**
+	 * Adjacency entries are (index << 2 | kind << 1 | side), kind 0 is a contact manifold, 1 a joint,
+	 * side 0 means the body is body A of that constraint.
+	 */
+	DYN_FUNC inline uint AVBD_Entry(uint index, uint kind, uint side) { return (index << 2) | (kind << 1) | side; }
+
 	/**
 	 * One primal step of a dynamic body: assemble and solve its 6x6 Newton system (Eqs. 4-6)
 	 */
@@ -345,6 +704,7 @@ namespace dyno
 		const uint* adjStart,
 		const uint* adj,
 		const AVBDManifold<Real>* manifolds,
+		const AVBDJoint<Real>* joints,
 		Real alpha,
 		Real h)
 	{
@@ -354,6 +714,10 @@ namespace dyno
 		Real ih2 = Real(1) / (h * h);
 		Real m = mass[body];
 		Matrix I = inertia[body];
+
+		// A body without mass, e.g. one made of medial primitives only, has no well defined Newton step
+		if (!(m > Real(0)))
+			return;
 
 		Coord x = pos[body];
 		Quat<Real> q = quat[body];
@@ -368,56 +732,12 @@ namespace dyno
 		for (uint e = adjStart[body]; e < adjStart[body + 1]; e++)
 		{
 			uint entry = adj[e];
-			const AVBDManifold<Real>& mf = manifolds[entry >> 1];
 			bool isA = (entry & 1) == 0;
 
-			int a = mf.bodyA;
-			int b = mf.bodyB;
-			bool hasB = b >= 0;
-
-			Quat<Real> qA = quat[a];
-			Coord dxA = pos[a] - x0[a];
-			Coord dwA = AVBD_Sub(qA, q0[a]);
-
-			Quat<Real> qB = hasB ? quat[b] : Quat<Real>::identity();
-			Coord dxB = hasB ? pos[b] - x0[b] : Coord(0);
-			Coord dwB = hasB ? AVBD_Sub(qB, q0[b]) : Coord(0);
-
-			const Coord basis[3] = { mf.n, mf.t1, mf.t2 };
-			Real sign = isA ? Real(1) : Real(-1);
-
-			for (int i = 0; i < mf.count; i++)
-			{
-				const AVBDContact<Real>& c = mf.c[i];
-
-				Coord rAw = qA.rotate(c.rA);
-				Coord rBw = hasB ? qB.rotate(c.rB) : Coord(0);
-
-				Coord C, F;
-				Real frictionScale, bounds;
-				AVBD_EvalContact(mf, c, rAw, rBw, dxA, dwA, dxB, dwB, alpha, C, F, frictionScale, bounds);
-
-				Coord r = isA ? rAw : rBw;
-				for (int k = 0; k < 3; k++)
-				{
-					Coord jl = basis[k] * sign;
-					Coord ja = r.cross(jl);
-					Real K = c.penalty[k];
-
-					for (int u = 0; u < 3; u++)
-					{
-						for (int v = 0; v < 3; v++)
-						{
-							lhsLin(u, v) += K * jl[u] * jl[v];
-							lhsAng(u, v) += K * ja[u] * ja[v];
-							lhsCross(u, v) += K * ja[u] * jl[v];
-						}
-					}
-
-					rhsLin += jl * F[k];
-					rhsAng += ja * F[k];
-				}
-			}
+			if (entry & 2)
+				AVBD_StampJoint(joints[entry >> 2], isA, pos, quat, alpha, lhsLin, lhsAng, lhsCross, rhsLin, rhsAng);
+			else
+				AVBD_StampManifold(manifolds[entry >> 2], isA, pos, quat, x0, q0, alpha, lhsLin, lhsAng, lhsCross, rhsLin, rhsAng);
 		}
 
 		Coord dx, dw;

@@ -95,6 +95,7 @@ namespace dyno
 
 		Real mA = mass[bodyA];
 		m.mass = AVBD_IsDynamic<Real>(att, bodyB) ? mA * mass[bodyB] / (mA + mass[bodyB]) : mA;
+		if (!(m.mass > Real(0))) m.mass = Real(1);
 
 		Quat<Real> qAinv = quat[bodyA].conjugate();
 		Quat<Real> qBinv = bodyB != INVALID ? quat[bodyB].conjugate() : Quat<Real>::identity();
@@ -276,6 +277,324 @@ namespace dyno
 	}
 
 	/******************************************************************************************************************
+	 * Joints
+	 ******************************************************************************************************************/
+
+	template<typename Real, typename Coord, typename Matrix>
+	GPU_FUNC inline void AVBD_FinishJoint(
+		AVBDJoint<Real>& j,
+		DArray<Real>& mass,
+		DArray<Matrix>& initialInertia,
+		DArray<Attribute>& att,
+		Real penaltyMin)
+	{
+		bool dynA = AVBD_IsDynamic<Real>(att, j.bodyA);
+		bool dynB = AVBD_IsDynamic<Real>(att, j.bodyB);
+
+		Real mA = dynA ? mass[j.bodyA] : Real(0);
+		Real mB = dynB ? mass[j.bodyB] : Real(0);
+		if (dynA && dynB) j.mass = mA * mB / (mA + mB);
+		else j.mass = dynA ? mA : mB;
+		if (!(j.mass > Real(0))) j.mass = Real(1);
+
+		// Radius of gyration of the lighter dynamic body turns rotation errors into lengths
+		int light = (dynA && (!dynB || mA <= mB)) ? j.bodyA : (dynB ? j.bodyB : INVALID);
+		j.L = Real(1);
+		if (light != INVALID && mass[light] > Real(0))
+		{
+			Matrix I = initialInertia[light];
+			Real r2 = (I(0, 0) + I(1, 1) + I(2, 2)) / mass[light];
+			if (r2 > Real(0)) j.L = sqrt(r2);
+		}
+
+		for (int k = 0; k < AVBDJoint<Real>::MAX_ROWS; k++)
+		{
+			j.C0[k] = Real(0);
+			j.lambda[k] = Real(0);
+			j.penalty[k] = penaltyMin * j.mass;
+		}
+	}
+
+	template<typename Real, typename Coord, typename Matrix>
+	__global__ void AVBD_SetupBallJoints(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<BallAndSocketJoint<Real>> input,
+		DArray<Coord> pos,
+		DArray<Quat<Real>> quat,
+		DArray<Real> mass,
+		DArray<Matrix> initialInertia,
+		DArray<Attribute> att,
+		Real penaltyMin,
+		uint offset)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= input.size()) return;
+
+		BallAndSocketJoint<Real> in = input[tId];
+		AVBDJoint<Real> j;
+		j.type = AVBD_JOINT_BALL;
+		j.bodyA = in.bodyId1;
+		j.bodyB = in.bodyId2;
+		j.rA = in.r1;
+		j.rB = in.r2;
+		AVBD_FinishJoint<Real, Coord, Matrix>(j, mass, initialInertia, att, penaltyMin);
+		joints[offset + tId] = j;
+	}
+
+	template<typename Real, typename Coord, typename Matrix>
+	__global__ void AVBD_SetupHingeJoints(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<HingeJoint<Real>> input,
+		DArray<Coord> pos,
+		DArray<Quat<Real>> quat,
+		DArray<Real> mass,
+		DArray<Matrix> initialInertia,
+		DArray<Attribute> att,
+		Real penaltyMin,
+		uint offset)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= input.size()) return;
+
+		HingeJoint<Real> in = input[tId];
+		AVBDJoint<Real> j;
+		j.type = AVBD_JOINT_HINGE;
+		j.bodyA = in.bodyId1;
+		j.bodyB = in.bodyId2;
+		j.rA = in.r1;
+		j.axisA = in.hingeAxisBody1;
+		if (j.bodyB != INVALID)
+		{
+			j.rB = in.r2;
+			j.axisB = in.hingeAxisBody2;
+		}
+		else
+		{
+			// Anchored to the world at the current pose
+			j.rB = pos[j.bodyA] + quat[j.bodyA].rotate(in.r1);
+			j.axisB = quat[j.bodyA].rotate(in.hingeAxisBody1);
+		}
+		AVBD_FinishJoint<Real, Coord, Matrix>(j, mass, initialInertia, att, penaltyMin);
+		joints[offset + tId] = j;
+	}
+
+	template<typename Real, typename Coord, typename Matrix>
+	__global__ void AVBD_SetupSliderJoints(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<SliderJoint<Real>> input,
+		DArray<Coord> pos,
+		DArray<Quat<Real>> quat,
+		DArray<Real> mass,
+		DArray<Matrix> initialInertia,
+		DArray<Attribute> att,
+		Real penaltyMin,
+		uint offset)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= input.size()) return;
+
+		SliderJoint<Real> in = input[tId];
+		AVBDJoint<Real> j;
+		j.type = AVBD_JOINT_SLIDER;
+		j.bodyA = in.bodyId1;
+		j.bodyB = in.bodyId2;
+		j.rA = in.r1;
+		j.axisA = in.sliderAxis;
+		j.qRel = Quat<Real>(in.q_init.x, in.q_init.y, in.q_init.z, in.q_init.w);
+		j.rB = j.bodyB != INVALID ? in.r2 : pos[j.bodyA] + quat[j.bodyA].rotate(in.r1);
+		AVBD_FinishJoint<Real, Coord, Matrix>(j, mass, initialInertia, att, penaltyMin);
+		joints[offset + tId] = j;
+	}
+
+	template<typename Real, typename Coord, typename Matrix>
+	__global__ void AVBD_SetupFixedJoints(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<FixedJoint<Real>> input,
+		DArray<Coord> pos,
+		DArray<Quat<Real>> quat,
+		DArray<Real> mass,
+		DArray<Matrix> initialInertia,
+		DArray<Attribute> att,
+		Real penaltyMin,
+		uint offset)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= input.size()) return;
+
+		FixedJoint<Real> in = input[tId];
+		AVBDJoint<Real> j;
+		j.type = AVBD_JOINT_FIXED;
+		j.bodyA = in.bodyId1;
+		j.bodyB = in.bodyId2;
+		j.rA = in.r1;
+		if (j.bodyB != INVALID)
+		{
+			j.rB = in.r2;
+			j.qRel = in.q_init;
+		}
+		else
+		{
+			// The world anchor and orientation can be animated through setAnchorPoint / setAnchorAngle
+			j.rB = in.w;
+			j.qRel = in.q;
+		}
+		AVBD_FinishJoint<Real, Coord, Matrix>(j, mass, initialInertia, att, penaltyMin);
+		joints[offset + tId] = j;
+	}
+
+	template<typename Real, typename Coord, typename Matrix>
+	__global__ void AVBD_SetupPointJoints(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<PointJoint<Real>> input,
+		DArray<Coord> pos,
+		DArray<Quat<Real>> quat,
+		DArray<Real> mass,
+		DArray<Matrix> initialInertia,
+		DArray<Attribute> att,
+		Real penaltyMin,
+		uint offset)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= input.size()) return;
+
+		PointJoint<Real> in = input[tId];
+		AVBDJoint<Real> j;
+		j.type = AVBD_JOINT_POINT;
+		j.bodyA = in.bodyId1;
+		j.bodyB = INVALID;
+		j.rA = Coord(0);
+		j.rB = in.anchorPoint;
+		AVBD_FinishJoint<Real, Coord, Matrix>(j, mass, initialInertia, att, penaltyMin);
+		joints[offset + tId] = j;
+	}
+
+	template<typename Real, typename Coord, typename Matrix>
+	__global__ void AVBD_SetupDistanceJoints(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<DistanceJoint<Real>> input,
+		DArray<Coord> pos,
+		DArray<Quat<Real>> quat,
+		DArray<Real> mass,
+		DArray<Matrix> initialInertia,
+		DArray<Attribute> att,
+		Real penaltyMin,
+		uint offset)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= input.size()) return;
+
+		DistanceJoint<Real> in = input[tId];
+		AVBDJoint<Real> j;
+		j.type = AVBD_JOINT_DISTANCE;
+		j.bodyA = in.bodyId1;
+		j.bodyB = in.bodyId2;
+		j.rA = in.r1;
+		j.rB = in.r2;
+		j.distance = in.distance;
+		AVBD_FinishJoint<Real, Coord, Matrix>(j, mass, initialInertia, att, penaltyMin);
+		joints[offset + tId] = j;
+	}
+
+	/**
+	 * Joints are rebuilt every frame so that animated anchors are picked up, the solver state is carried over
+	 * when the joint set did not change.
+	 */
+	template<typename Real>
+	__global__ void AVBD_KeepJointState(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<AVBDJoint<Real>> old)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= joints.size()) return;
+
+		AVBDJoint<Real> j = joints[tId];
+		const AVBDJoint<Real>& o = old[tId];
+		if (o.type != j.type || o.bodyA != j.bodyA || o.bodyB != j.bodyB) return;
+
+		for (int k = 0; k < AVBDJoint<Real>::MAX_ROWS; k++)
+		{
+			j.lambda[k] = o.lambda[k];
+			j.penalty[k] = o.penalty[k];
+		}
+
+		// World anchors derived from the pose must stay where they were first placed
+		if (j.bodyB < 0 && (j.type == AVBD_JOINT_HINGE || j.type == AVBD_JOINT_SLIDER))
+		{
+			j.rB = o.rB;
+			j.axisB = o.axisB;
+		}
+
+		joints[tId] = j;
+	}
+
+	template<typename TDataType>
+	void AVBDConstraintSolver<TDataType>::setupJoints()
+	{
+		auto topo = this->inDiscreteElements()->constDataPtr();
+
+		auto& balls = topo->ballAndSocketJoints();
+		auto& hinges = topo->hingeJoints();
+		auto& sliders = topo->sliderJoints();
+		auto& fixeds = topo->fixedJoints();
+		auto& points = topo->pointJoints();
+		auto& distances = topo->distanceJoints();
+
+		uint total = balls.size() + hinges.size() + sliders.size() + fixeds.size() + points.size() + distances.size();
+
+		bool keep = total > 0 && mJoints.size() == total;
+		if (keep)
+			mOldJoints.assign(mJoints);
+
+		mJoints.resize(total);
+		if (total == 0)
+			return;
+
+		if (hinges.size() + sliders.size() > 0)
+		{
+			static bool warned = false;
+			if (!warned)
+			{
+				printf("AVBDConstraintSolver: ranges and motors of hinge and slider joints are not supported yet\n");
+				warned = true;
+			}
+		}
+
+		auto& pos = this->inCenter()->getData();
+		auto& quat = this->inQuaternion()->getData();
+		auto& mass = this->inMass()->getData();
+		auto& inertia0 = this->inInitialInertia()->getData();
+		auto& att = this->inAttribute()->getData();
+		Real kMin = this->varPenaltyMin()->getValue();
+
+		uint offset = 0;
+		if (balls.size() > 0)
+			cuExecute(balls.size(), AVBD_SetupBallJoints, mJoints, balls, pos, quat, mass, inertia0, att, kMin, offset);
+		offset += balls.size();
+
+		if (hinges.size() > 0)
+			cuExecute(hinges.size(), AVBD_SetupHingeJoints, mJoints, hinges, pos, quat, mass, inertia0, att, kMin, offset);
+		offset += hinges.size();
+
+		if (sliders.size() > 0)
+			cuExecute(sliders.size(), AVBD_SetupSliderJoints, mJoints, sliders, pos, quat, mass, inertia0, att, kMin, offset);
+		offset += sliders.size();
+
+		if (fixeds.size() > 0)
+			cuExecute(fixeds.size(), AVBD_SetupFixedJoints, mJoints, fixeds, pos, quat, mass, inertia0, att, kMin, offset);
+		offset += fixeds.size();
+
+		if (points.size() > 0)
+			cuExecute(points.size(), AVBD_SetupPointJoints, mJoints, points, pos, quat, mass, inertia0, att, kMin, offset);
+		offset += points.size();
+
+		if (distances.size() > 0)
+			cuExecute(distances.size(), AVBD_SetupDistanceJoints, mJoints, distances, pos, quat, mass, inertia0, att, kMin, offset);
+
+		if (keep)
+			cuExecute(total, AVBD_KeepJointState, mJoints, mOldJoints);
+	}
+
+	/******************************************************************************************************************
 	 * Warm start across frames
 	 ******************************************************************************************************************/
 
@@ -442,13 +761,36 @@ namespace dyno
 		unsigned long long kB = ~0ull;
 		if (m.count > 0)
 		{
-			kA = ((unsigned long long)(uint)m.bodyA << 32) | (unsigned long long)(tId << 1);
+			kA = ((unsigned long long)(uint)m.bodyA << 32) | AVBD_Entry(tId, 0, 0);
 			if (AVBD_IsDynamic<Real>(att, m.bodyB))
-				kB = ((unsigned long long)(uint)m.bodyB << 32) | (unsigned long long)((tId << 1) | 1);
+				kB = ((unsigned long long)(uint)m.bodyB << 32) | AVBD_Entry(tId, 0, 1);
 		}
 
 		keys[2 * tId] = kA;
 		keys[2 * tId + 1] = kB;
+	}
+
+	template<typename Real>
+	__global__ void AVBD_JointAdjacencyKeys(
+		DArray<unsigned long long> keys,
+		DArray<AVBDJoint<Real>> joints,
+		DArray<Attribute> att,
+		uint offset)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= joints.size()) return;
+
+		const AVBDJoint<Real>& j = joints[tId];
+
+		unsigned long long kA = ~0ull;
+		unsigned long long kB = ~0ull;
+		if (AVBD_IsDynamic<Real>(att, j.bodyA))
+			kA = ((unsigned long long)(uint)j.bodyA << 32) | AVBD_Entry(tId, 1, 0);
+		if (AVBD_IsDynamic<Real>(att, j.bodyB))
+			kB = ((unsigned long long)(uint)j.bodyB << 32) | AVBD_Entry(tId, 1, 1);
+
+		keys[offset + 2 * tId] = kA;
+		keys[offset + 2 * tId + 1] = kB;
 	}
 
 	__global__ void AVBD_AdjacencyStart(
@@ -480,7 +822,8 @@ namespace dyno
 	template<typename TDataType>
 	void AVBDConstraintSolver<TDataType>::buildAdjacency(uint bodyNum)
 	{
-		uint slots = 2 * mManifoldNum;
+		uint jointNum = mJoints.size();
+		uint slots = 2 * (mManifoldNum + jointNum);
 
 		mAdjStart.resize(bodyNum + 1);
 		if (slots == 0)
@@ -491,7 +834,10 @@ namespace dyno
 		}
 
 		mAdjKeys.resize(slots);
-		cuExecute(mManifoldNum, AVBD_AdjacencyKeys, mAdjKeys, mManifolds, this->inAttribute()->getData());
+		if (mManifoldNum > 0)
+			cuExecute(mManifoldNum, AVBD_AdjacencyKeys, mAdjKeys, mManifolds, this->inAttribute()->getData());
+		if (jointNum > 0)
+			cuExecute(jointNum, AVBD_JointAdjacencyKeys, mAdjKeys, mJoints, this->inAttribute()->getData(), 2 * mManifoldNum);
 
 		// Sorting makes the gather order, hence the floating point sums, deterministic
 		thrust::sort(thrust::device,
@@ -514,11 +860,19 @@ namespace dyno
 	template<typename Real>
 	GPU_FUNC inline int AVBD_Neighbor(
 		const DArray<AVBDManifold<Real>>& manifolds,
+		const DArray<AVBDJoint<Real>>& joints,
 		const DArray<Attribute>& att,
 		uint entry)
 	{
-		const AVBDManifold<Real>& m = manifolds[entry >> 1];
-		int other = (entry & 1) ? m.bodyA : m.bodyB;
+		uint idx = entry >> 2;
+		bool isB = (entry & 1) != 0;
+
+		int other;
+		if (entry & 2)
+			other = isB ? joints[idx].bodyA : joints[idx].bodyB;
+		else
+			other = isB ? manifolds[idx].bodyA : manifolds[idx].bodyB;
+
 		return AVBD_IsDynamic<Real>(att, other) ? other : INVALID;
 	}
 
@@ -550,6 +904,7 @@ namespace dyno
 		DArray<uint> adjStart,
 		DArray<uint> adj,
 		DArray<AVBDManifold<Real>> manifolds,
+		DArray<AVBDJoint<Real>> joints,
 		DArray<Attribute> att,
 		bool keepPrevious)
 	{
@@ -561,7 +916,7 @@ namespace dyno
 		unsigned int forbidden = 0;
 		for (uint e = adjStart[tId]; e < adjStart[tId + 1]; e++)
 		{
-			int u = AVBD_Neighbor(manifolds, att, adj[e]);
+			int u = AVBD_Neighbor(manifolds, joints, att, adj[e]);
 			if (u == INVALID) continue;
 
 			int cu = color[u];
@@ -580,6 +935,7 @@ namespace dyno
 		DArray<uint> adjStart,
 		DArray<uint> adj,
 		DArray<AVBDManifold<Real>> manifolds,
+		DArray<AVBDJoint<Real>> joints,
 		DArray<Attribute> att)
 	{
 		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
@@ -598,7 +954,7 @@ namespace dyno
 		bool conflict = false;
 		for (uint e = adjStart[tId]; e < adjStart[tId + 1] && !conflict; e++)
 		{
-			int u = AVBD_Neighbor(manifolds, att, adj[e]);
+			int u = AVBD_Neighbor(manifolds, joints, att, adj[e]);
 			if (u == INVALID || u == (int)tId) continue;
 
 			if (color[u] == t)
@@ -675,8 +1031,8 @@ namespace dyno
 		CArray<uint> hCounter;
 		for (uint round = 0; round < AVBD_MAX_COLORING_ROUNDS; round++)
 		{
-			cuExecute(bodyNum, AVBD_ColorTentative, mTentative, mColor, mAdjStart, mAdj, mManifolds, att, round == 0);
-			cuExecute(bodyNum, AVBD_ColorResolve, mResolved, mTentative, mColor, mAdjStart, mAdj, mManifolds, att);
+			cuExecute(bodyNum, AVBD_ColorTentative, mTentative, mColor, mAdjStart, mAdj, mManifolds, mJoints, att, round == 0);
+			cuExecute(bodyNum, AVBD_ColorResolve, mResolved, mTentative, mColor, mAdjStart, mAdj, mManifolds, mJoints, att);
 
 			mCounter.reset();
 			cuExecute(bodyNum, AVBD_ColorCommit, mColor, mResolved, mCounter);
@@ -766,6 +1122,7 @@ namespace dyno
 		DArray<uint> adjStart,
 		DArray<uint> adj,
 		DArray<AVBDManifold<Real>> manifolds,
+		DArray<AVBDJoint<Real>> joints,
 		uint first,
 		uint last,
 		Real alpha,
@@ -775,7 +1132,7 @@ namespace dyno
 		if (tId >= last) return;
 
 		AVBD_PrimalBody(colorBodies[tId], pos.begin(), quat.begin(), x0.begin(), q0.begin(), xHat.begin(), qHat.begin(),
-			mass.begin(), inertia.begin(), adjStart.begin(), adj.begin(), manifolds.begin(), alpha, h);
+			mass.begin(), inertia.begin(), adjStart.begin(), adj.begin(), manifolds.begin(), joints.begin(), alpha, h);
 	}
 
 	template<typename Real, typename Coord>
@@ -795,6 +1152,36 @@ namespace dyno
 
 		AVBD_DualManifold(m, pos.begin(), quat.begin(), x0.begin(), q0.begin(), params);
 		manifolds[tId] = m;
+	}
+
+	template<typename Real, typename Coord>
+	__global__ void AVBD_BeginJoints(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<Coord> x0,
+		DArray<Quat<Real>> q0,
+		AVBDParams params)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= joints.size()) return;
+
+		AVBDJoint<Real> j = joints[tId];
+		AVBD_BeginJoint(j, x0.begin(), q0.begin(), params);
+		joints[tId] = j;
+	}
+
+	template<typename Real, typename Coord>
+	__global__ void AVBD_DualJoints(
+		DArray<AVBDJoint<Real>> joints,
+		DArray<Coord> pos,
+		DArray<Quat<Real>> quat,
+		AVBDParams params)
+	{
+		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (tId >= joints.size()) return;
+
+		AVBDJoint<Real> j = joints[tId];
+		AVBD_DualJoint(j, pos.begin(), quat.begin(), params);
+		joints[tId] = j;
 	}
 
 	template<typename Real, typename Coord, typename Matrix>
@@ -886,6 +1273,9 @@ namespace dyno
 				params);
 		}
 
+		if (mJoints.size() > 0)
+			cuExecute(mJoints.size(), AVBD_BeginJoints, mJoints, mX0, mQ0, params);
+
 		uint iterNum = this->varIterationNumber()->getValue();
 		for (uint it = 0; it < iterNum; it++)
 		{
@@ -909,6 +1299,7 @@ namespace dyno
 					mAdjStart,
 					mAdj,
 					mManifolds,
+					mJoints,
 					first,
 					last,
 					alpha,
@@ -924,6 +1315,11 @@ namespace dyno
 					mX0,
 					mQ0,
 					params);
+			}
+
+			if (mJoints.size() > 0)
+			{
+				cuExecute(mJoints.size(), AVBD_DualJoints, mJoints, pos, quat, params);
 			}
 		}
 
@@ -948,21 +1344,11 @@ namespace dyno
 		if (bodyNum == 0)
 			return;
 
-		auto topo = this->inDiscreteElements()->constDataPtr();
-		if (topo->totalJointSize() > 0)
-		{
-			static bool warned = false;
-			if (!warned)
-			{
-				printf("AVBDConstraintSolver: joints are not supported yet and will be ignored\n");
-				warned = true;
-			}
-		}
-
 		resizeBodyBuffers(bodyNum);
 
 		setupManifolds();
 		warmStart();
+		setupJoints();
 		buildAdjacency(bodyNum);
 		colorBodies(bodyNum);
 

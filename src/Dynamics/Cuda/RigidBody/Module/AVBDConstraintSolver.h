@@ -32,7 +32,8 @@ namespace dyno
 	 *	without atomics: each thread gathers the forces of the manifolds adjacent to its body through a CSR adjacency.
 	 *	Colors are computed on the GPU and reused across frames, so that a coherent scene converges in a round or two.
 	 *	Contacts are hard constraints handled by an augmented Lagrangian with a ramped penalty, lambda and penalty
-	 *	are warm started across frames by matching manifolds on their shape ids.
+	 *	are warm started across frames by matching manifolds on their shape ids. Joints (ball, hinge, slider, fixed, point
+ *	and distance) are hard constraints in the same framework, angular rows are scaled by the radius of gyration.
 	 */
 	template<typename TDataType>
 	class AVBDConstraintSolver : public ConstraintModule
@@ -67,8 +68,6 @@ namespace dyno
 		DEF_VAR(Real, Gamma, 0.99, "Warm start decay of lambda and penalty");
 
 		DEF_VAR(Real, BetaLinear, 100000, "Penalty ramping rate of linear constraints, per unit mass");
-
-		DEF_VAR(Real, BetaAngular, 100, "Penalty ramping rate of angular constraints");
 
 		DEF_VAR(Real, PenaltyMin, 1, "Per unit mass");
 
@@ -115,6 +114,7 @@ namespace dyno
 	private:
 		void resizeBodyBuffers(uint bodyNum);
 		void setupManifolds();
+		void setupJoints();
 		void warmStart();
 		void buildAdjacency(uint bodyNum);
 		void colorBodies(uint bodyNum);
@@ -135,7 +135,10 @@ namespace dyno
 		DArray<unsigned long long> mSortKeys;
 		DArray<uint> mSortIds;
 
-		// Body to manifold adjacency in the CSR format, each entry is (manifold id << 1 | side)
+		DArray<AVBDJoint<Real>> mJoints;
+		DArray<AVBDJoint<Real>> mOldJoints;
+
+		// Body to constraint adjacency in the CSR format, see AVBD_Entry
 		DArray<unsigned long long> mAdjKeys;
 		DArray<uint> mAdjStart;
 		DArray<uint> mAdj;

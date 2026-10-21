@@ -61,9 +61,16 @@ public:
 		std::vector<std::vector<uint>> lists(N);
 		for (uint j = 0; j < manifolds.size(); j++)
 		{
-			lists[manifolds[j].bodyA].push_back(j << 1);
+			lists[manifolds[j].bodyA].push_back(AVBD_Entry(j, 0, 0));
 			if (manifolds[j].bodyB >= 0 && type_[manifolds[j].bodyB] == AVBD_DYNAMIC)
-				lists[manifolds[j].bodyB].push_back((j << 1) | 1);
+				lists[manifolds[j].bodyB].push_back(AVBD_Entry(j, 0, 1));
+		}
+		for (uint j = 0; j < joints.size(); j++)
+		{
+			if (type_[joints[j].bodyA] == AVBD_DYNAMIC)
+				lists[joints[j].bodyA].push_back(AVBD_Entry(j, 1, 0));
+			if (joints[j].bodyB >= 0 && type_[joints[j].bodyB] == AVBD_DYNAMIC)
+				lists[joints[j].bodyB].push_back(AVBD_Entry(j, 1, 1));
 		}
 		adjStart.assign(N + 1, 0);
 		adj.clear();
@@ -80,6 +87,8 @@ public:
 
 		for (auto& m : manifolds)
 			AVBD_BeginManifold(m, x0.data(), q0.data(), params);
+		for (auto& j : joints)
+			AVBD_BeginJoint(j, x0.data(), q0.data(), params);
 
 		int maxColor = 0;
 		for (uint i = 0; i < N; i++) maxColor = std::max(maxColor, color[i]);
@@ -90,15 +99,43 @@ public:
 				for (uint i = 0; i < N; i++)
 					if (type_[i] == AVBD_DYNAMIC && color[i] == c)
 						AVBD_PrimalBody(i, pos.data(), quat.data(), x0.data(), q0.data(), xHat.data(), qHat.data(),
-							mass.data(), inertia.data(), adjStart.data(), adj.data(), manifolds.data(), params.alpha, h);
+							mass.data(), inertia.data(), adjStart.data(), adj.data(), manifolds.data(), joints.data(), params.alpha, h);
 
 			for (auto& m : manifolds)
 				AVBD_DualManifold(m, pos.data(), quat.data(), x0.data(), q0.data(), params);
+			for (auto& j : joints)
+				AVBD_DualJoint(j, pos.data(), quat.data(), params);
 		}
 
 		for (uint i = 0; i < N; i++)
 			AVBD_FinishBody(i, type_[i], pos.data(), quat.data(), x0.data(), q0.data(), velocity.data(), angularVelocity.data(),
 				rotation.data(), inertia.data(), inertia0.data(), h);
+	}
+
+	// Joints between two bodies, or between body a and the world when b is -1. Anchors are given in world space.
+	AVBDJoint<float>& addJoint(int type, int a, int b, Coord anchor, Coord axis = Coord(0, 0, 1))
+	{
+		AVBDJoint<float> j;
+		j.type = type;
+		j.bodyA = a;
+		j.bodyB = b;
+		j.rA = quat[a].conjugate().rotate(anchor - pos[a]);
+		j.rB = b >= 0 ? quat[b].conjugate().rotate(anchor - pos[b]) : anchor;
+		j.axisA = quat[a].conjugate().rotate(axis);
+		j.axisB = b >= 0 ? quat[b].conjugate().rotate(axis) : axis;
+		j.qRel = b >= 0 ? quat[b].conjugate() * quat[a] : quat[a];
+
+		bool dynB = b >= 0 && type_[b] == AVBD_DYNAMIC;
+		j.mass = dynB ? mass[a] * mass[b] / (mass[a] + mass[b]) : mass[a];
+		j.L = std::sqrt((inertia0[a](0, 0) + inertia0[a](1, 1) + inertia0[a](2, 2)) / mass[a]);
+		for (int k = 0; k < AVBDJoint<float>::MAX_ROWS; k++)
+		{
+			j.C0[k] = 0;
+			j.lambda[k] = 0;
+			j.penalty[k] = params.penaltyMin * j.mass;
+		}
+		joints.push_back(j);
+		return joints.back();
 	}
 
 	Coord corner(uint i, int k) const
@@ -224,6 +261,7 @@ private:
 	std::vector<TQuat> q0, qHat;
 
 	std::vector<Manifold> manifolds;
+	std::vector<AVBDJoint<float>> joints;
 	std::vector<Feature> oldFeatures;
 	std::vector<uint> adjStart;
 	std::vector<uint> adj;
@@ -353,4 +391,114 @@ TEST(AVBD, FrictionOnSlope)
 		float travelled = (w.pos[0] - start).dot(downhill);
 		EXPECT_NEAR(travelled, expected, 0.15f * expected);
 	}
+}
+
+TEST(AVBD, PendulumChain)
+{
+	// A chain of five boxes hanging from the world by ball joints, released horizontally
+	AVBDWorld w;
+	const float s = 0.1f;
+	for (int i = 0; i < 5; i++)
+	{
+		w.addBox(Coord(2 * s * i + s, 2.0f, 0), Coord(s, 0.02f, 0.02f), 1000);
+		w.color[i] = i % 2;
+	}
+	w.addJoint(AVBD_JOINT_BALL, 0, -1, Coord(0, 2.0f, 0));
+	for (int i = 1; i < 5; i++)
+		w.addJoint(AVBD_JOINT_BALL, i, i - 1, Coord(2 * s * i, 2.0f, 0));
+
+	float maxGap = 0;
+	for (int f = 0; f < 240; f++)
+	{
+		w.step(1.0f / 60, 10);
+
+		// distance between consecutive anchors
+		for (int i = 1; i < 5; i++)
+		{
+			Coord a = w.pos[i] + w.quat[i].rotate(Coord(-s, 0, 0));
+			Coord b = w.pos[i - 1] + w.quat[i - 1].rotate(Coord(s, 0, 0));
+			maxGap = std::max(maxGap, (a - b).norm());
+		}
+		Coord top = w.pos[0] + w.quat[0].rotate(Coord(-s, 0, 0));
+		maxGap = std::max(maxGap, (top - Coord(0, 2.0f, 0)).norm());
+	}
+
+	EXPECT_LT(maxGap, 5e-3f);
+	// The chain must have swung down
+	EXPECT_LT(w.pos[4][1], 1.7f);
+}
+
+TEST(AVBD, HingeKeepsAxis)
+{
+	// A door hinged to the world around the z axis, pushed sideways: it may only rotate around z
+	AVBDWorld w;
+	w.gravity = 0;
+	w.addBox(Coord(0.5f, 0, 0), Coord(0.5f, 0.05f, 0.5f), 500);
+	w.addJoint(AVBD_JOINT_HINGE, 0, -1, Coord(0, 0, 0), Coord(0, 0, 1));
+	w.velocity[0] = Coord(0, 1.0f, 0.5f);
+	w.angularVelocity[0] = Coord(0.5f, 0, 0);
+
+	for (int f = 0; f < 120; f++)
+		w.step(1.0f / 60, 10);
+
+	Coord axis = w.quat[0].rotate(Coord(0, 0, 1));
+	EXPECT_NEAR(axis[2], 1.0f, 1e-3f);
+	Coord pivot = w.pos[0] + w.quat[0].rotate(Coord(-0.5f, 0, 0));
+	EXPECT_LT(pivot.norm(), 5e-3f);
+	// it does rotate around z
+	EXPECT_GT(std::abs(w.quat[0].rotate(Coord(1, 0, 0))[1]), 0.1f);
+}
+
+TEST(AVBD, FixedJointWeldsBodies)
+{
+	AVBDWorld w;
+	w.planes.push_back({ Coord(0, 1, 0), 0 });
+	w.addBox(Coord(0, 1.0f, 0), Coord(0.2f), 1000);
+	w.addBox(Coord(0.4f, 1.3f, 0), Coord(0.2f), 1000);
+	w.color[1] = 1;
+	w.addJoint(AVBD_JOINT_FIXED, 1, 0, Coord(0.2f, 1.15f, 0));
+
+	Coord rel0 = w.quat[0].conjugate().rotate(w.pos[1] - w.pos[0]);
+	for (int f = 0; f < 240; f++)
+		w.step(1.0f / 60, 10);
+
+	Coord rel = w.quat[0].conjugate().rotate(w.pos[1] - w.pos[0]);
+	EXPECT_LT((rel - rel0).norm(), 5e-3f);
+	EXPECT_LT(AVBD_Sub(w.quat[1], w.quat[0]).norm(), 5e-3f);
+	// the welded pair has landed and tipped over its support
+	EXPECT_LT(w.velocity[0].norm(), 0.05f);
+}
+
+TEST(AVBD, SliderAndDistance)
+{
+	AVBDWorld w;
+	w.gravity = 9.8f;
+	// slider along a 45 degree rail attached to the world
+	Coord axis = Coord(1, -1, 0) / std::sqrt(2.0f);
+	w.addBox(Coord(0, 1, 0), Coord(0.1f), 1000);
+	w.addJoint(AVBD_JOINT_SLIDER, 0, -1, Coord(0, 1, 0), axis);
+
+	// a ball hanging from the world at a fixed distance
+	w.addBox(Coord(1.0f, 1.0f, 0), Coord(0.05f), 1000);
+	auto& d = w.addJoint(AVBD_JOINT_DISTANCE, 1, -1, Coord(2.0f, 1.0f, 0));
+	d.rA = Coord(0);
+	d.rB = Coord(2.0f, 1.0f, 0);
+	d.distance = 1.0f;
+
+	float maxOff = 0, maxDist = 0;
+	for (int f = 0; f < 120; f++)
+	{
+		w.step(1.0f / 60, 10);
+		Coord dp = w.pos[0] - Coord(0, 1, 0);
+		maxOff = std::max(maxOff, (dp - axis * dp.dot(axis)).norm());
+		maxDist = std::max(maxDist, std::abs((w.pos[1] - Coord(2.0f, 1.0f, 0)).norm() - 1.0f));
+	}
+
+	EXPECT_LT(maxOff, 2e-3f);
+	EXPECT_LT(AVBD_Sub(w.quat[0], TQuat::identity()).norm(), 2e-3f);
+	// sliding down a frictionless 45 degree rail for two seconds
+	float travelled = (w.pos[0] - Coord(0, 1, 0)).dot(axis);
+	float expected = 0.5f * 9.8f * std::sqrt(0.5f) * 4.0f;
+	EXPECT_NEAR(travelled, expected, 0.1f * expected);
+	EXPECT_LT(maxDist, 5e-3f);
 }
