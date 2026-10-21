@@ -88,7 +88,7 @@ public:
 		for (auto& m : manifolds)
 			AVBD_BeginManifold(m, x0.data(), q0.data(), params);
 		for (auto& j : joints)
-			AVBD_BeginJoint(j, x0.data(), q0.data(), params);
+			AVBD_BeginJoint(j, x0.data(), q0.data(), params, h);
 
 		int maxColor = 0;
 		for (uint i = 0; i < N; i++) maxColor = std::max(maxColor, color[i]);
@@ -128,6 +128,7 @@ public:
 		bool dynB = b >= 0 && type_[b] == AVBD_DYNAMIC;
 		j.mass = dynB ? mass[a] * mass[b] / (mass[a] + mass[b]) : mass[a];
 		j.L = std::sqrt((inertia0[a](0, 0) + inertia0[a](1, 1) + inertia0[a](2, 2)) / mass[a]);
+		j.distance = 0;
 		for (int k = 0; k < AVBDJoint<float>::MAX_ROWS; k++)
 		{
 			j.C0[k] = 0;
@@ -501,4 +502,85 @@ TEST(AVBD, SliderAndDistance)
 	float expected = 0.5f * 9.8f * std::sqrt(0.5f) * 4.0f;
 	EXPECT_NEAR(travelled, expected, 0.1f * expected);
 	EXPECT_LT(maxDist, 5e-3f);
+}
+
+TEST(AVBD, HingeLimitAndMotor)
+{
+	// A horizontal bar hinged to the world around z falls under gravity until it reaches its limit
+	{
+		AVBDWorld w;
+		w.addBox(Coord(0.5f, 0, 0), Coord(0.5f, 0.05f, 0.05f), 500);
+		auto& j = w.addJoint(AVBD_JOINT_HINGE, 0, -1, Coord(0, 0, 0), Coord(0, 0, 1));
+		j.useRange = 1;
+		j.lo = -0.4f;
+		j.hi = 0.4f;
+
+		float maxAngle = 0;
+		for (int f = 0; f < 180; f++)
+		{
+			w.step(1.0f / 60, 10);
+			Coord dir = w.quat[0].rotate(Coord(1, 0, 0));
+			maxAngle = std::max(maxAngle, std::abs(std::atan2(dir[1], dir[0])));
+		}
+		Coord dir = w.quat[0].rotate(Coord(1, 0, 0));
+		float angle = std::atan2(dir[1], dir[0]);
+		EXPECT_NEAR(angle, -0.4f, 0.02f);
+		EXPECT_LT(maxAngle, 0.45f);
+	}
+
+	// Without gravity the motor spins the bar at a constant rate. The hinge angle (B relative to A) runs at
+	// -speed, B is the world here so body A turns at +speed around z.
+	{
+		AVBDWorld w;
+		w.gravity = 0;
+		w.addBox(Coord(0.5f, 0, 0), Coord(0.5f, 0.05f, 0.05f), 500);
+		auto& j = w.addJoint(AVBD_JOINT_HINGE, 0, -1, Coord(0, 0, 0), Coord(0, 0, 1));
+		j.useMotor = 1;
+		j.motorSpeed = 1.0f;
+
+		for (int f = 0; f < 60; f++)
+			w.step(1.0f / 60, 10);
+
+		EXPECT_NEAR(w.angularVelocity[0][2], 1.0f, 0.02f);
+		Coord dir = w.quat[0].rotate(Coord(1, 0, 0));
+		EXPECT_NEAR(std::atan2(dir[1], dir[0]), 1.0f, 0.05f);
+	}
+}
+
+TEST(AVBD, SliderLimitAndMotor)
+{
+	Coord axis(1, 0, 0);
+
+	// Falling along a vertical rail onto its lower limit
+	{
+		AVBDWorld w;
+		w.addBox(Coord(0, 1, 0), Coord(0.1f), 1000);
+		auto& j = w.addJoint(AVBD_JOINT_SLIDER, 0, -1, Coord(0, 1, 0), Coord(0, 1, 0));
+		// the displacement is (pB - pA) along the axis, B is the world anchor so it grows when A falls
+		j.useRange = 1;
+		j.lo = -1.0f;
+		j.hi = 0.3f;
+
+		for (int f = 0; f < 120; f++)
+			w.step(1.0f / 60, 10);
+
+		EXPECT_NEAR(w.pos[0][1], 0.7f, 0.01f);
+		EXPECT_LT(w.velocity[0].norm(), 0.05f);
+	}
+
+	// The motor drives (pB - pA) along the axis at +speed, i.e. A moves at -speed
+	{
+		AVBDWorld w;
+		w.gravity = 0;
+		w.addBox(Coord(0, 0, 0), Coord(0.1f), 1000);
+		auto& j = w.addJoint(AVBD_JOINT_SLIDER, 0, -1, Coord(0, 0, 0), axis);
+		j.useMotor = 1;
+		j.motorSpeed = 0.5f;
+
+		for (int f = 0; f < 60; f++)
+			w.step(1.0f / 60, 10);
+
+		EXPECT_NEAR(w.velocity[0][0], -0.5f, 0.01f);
+		EXPECT_NEAR(w.pos[0][0], -0.5f, 0.02f);
+	}
 }

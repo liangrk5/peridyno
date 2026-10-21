@@ -199,7 +199,9 @@ namespace dyno
 
 		for (int r = 0; r < 3; r++)
 		{
-			C[r] = c.C0[r] * (Real(1) - alpha)
+			// Only penetration is stabilized, a positive gap may be closed within the step
+			Real C0 = (r == 0 && c.C0[0] > Real(0)) ? c.C0[0] : c.C0[r] * (Real(1) - alpha);
+			C[r] = C0
 				+ b[r].dot(dxA) + rAw.cross(b[r]).dot(dwA)
 				- b[r].dot(dxB) - rBw.cross(b[r]).dot(dwB);
 			F[r] = c.penalty[r] * C[r] + c.lambda[r];
@@ -343,12 +345,16 @@ namespace dyno
 	};
 
 	/**
-	 * @brief A joint as seen by the AVBD solver. Rows 0-2 are linear, rows 3-5 angular.
+	 * @brief A joint as seen by the AVBD solver. Rows 0-2 are linear, rows 3-5 angular, rows 6-7 the lower and upper
+	 * limits of a hinge or slider and row 8 its motor.
 	 */
 	template<typename Real>
 	struct AVBDJoint
 	{
-		static const int MAX_ROWS = 6;
+		static const int MAX_ROWS = 9;
+		static const int ROW_MIN = 6;
+		static const int ROW_MAX = 7;
+		static const int ROW_MOTOR = 8;
 
 		int type = AVBD_JOINT_BALL;
 
@@ -362,6 +368,18 @@ namespace dyno
 		Quat<Real> qRel;			// target rotation: qA = qB * qRel, or qA = qRel when B is the world
 
 		Real distance = 0;
+
+		// Hinge angle (radians) or slider displacement (length) limits and motor speed. As in the TJS solver,
+		// the hinge angle is the rotation of B relative to A around the axis of A and the slider displacement is
+		// (pB - pA) along the axis of A. The motor drives the hinge angle at -speed and the displacement at +speed.
+		int useRange = 0;
+		int useMotor = 0;
+		Real lo = 0;
+		Real hi = 0;
+		Real motorSpeed = 0;
+
+		Real base = 0;				// hinge angle or slider displacement at the beginning of the step
+		Real motorStep = 0;			// motor travel within one step
 
 		Real L = 1;					// length scale turning angular errors into lengths
 		Real mass = 1;				// effective mass, penalties are stored per unit mass
@@ -380,11 +398,13 @@ namespace dyno
 		uint mask = 0;			// active rows
 		bool pointLock = false;	// rows 0-2 lock a point, geometric stiffness applies
 
-		Real C[6];
-		Vector<Real, 3> jlA[6];
-		Vector<Real, 3> jaA[6];
-		Vector<Real, 3> jlB[6];
-		Vector<Real, 3> jaB[6];
+		Real C[AVBDJoint<Real>::MAX_ROWS];
+		Vector<Real, 3> jlA[AVBDJoint<Real>::MAX_ROWS];
+		Vector<Real, 3> jaA[AVBDJoint<Real>::MAX_ROWS];
+		Vector<Real, 3> jlB[AVBDJoint<Real>::MAX_ROWS];
+		Vector<Real, 3> jaB[AVBDJoint<Real>::MAX_ROWS];
+
+		Real value = 0;			// hinge angle or slider displacement
 
 		Vector<Real, 3> rAw;
 		Vector<Real, 3> rBw;
@@ -485,6 +505,96 @@ namespace dyno
 			angularRow(3, b1.cross(aB) * j.L, j.L * b1.dot(aB));
 			angularRow(4, b2.cross(aB) * j.L, j.L * b2.dot(aB));
 		}
+
+		if ((j.type == AVBD_JOINT_HINGE || j.type == AVBD_JOINT_SLIDER) && (j.useRange || j.useMotor))
+		{
+			// Gradient of the joint coordinate
+			Coord gLA, gAA, gLB, gAB;
+			Coord a = qA.rotate(j.axisA);
+			if (j.type == AVBD_JOINT_HINGE)
+			{
+				Quat<Real> r = qB * qA.conjugate();
+				if (r.w < 0) r = Quat<Real>(-r.x, -r.y, -r.z, -r.w);
+				rows.value = Real(2) * atan2(Coord(r.x, r.y, r.z).dot(a), r.w);
+
+				// angles are turned into lengths like the other angular rows
+				gLA = Coord(0);
+				gAA = -a * j.L;
+				gLB = Coord(0);
+				gAB = a * j.L;
+			}
+			else
+			{
+				rows.value = -d.dot(a);
+
+				gLA = -a;
+				gAA = -(pB - xA).cross(a);
+				gLB = a;
+				gAB = rows.rBw.cross(a);
+			}
+
+			Real scale = j.type == AVBD_JOINT_HINGE ? j.L : Real(1);
+
+			auto gradientRow = [&](int k, Real sign, Real c) {
+				rows.C[k] = c;
+				rows.jlA[k] = gLA * sign;
+				rows.jaA[k] = gAA * sign;
+				rows.jlB[k] = gLB * sign;
+				rows.jaB[k] = gAB * sign;
+				rows.mask |= 1u << k;
+			};
+
+			if (j.useRange)
+			{
+				gradientRow(AVBDJoint<Real>::ROW_MIN, Real(1), scale * (rows.value - j.lo));
+				gradientRow(AVBDJoint<Real>::ROW_MAX, Real(-1), scale * (j.hi - rows.value));
+			}
+
+			if (j.useMotor)
+			{
+				Real travel = rows.value - j.base;
+				if (j.type == AVBD_JOINT_HINGE)
+				{
+					// wrap into (-pi, pi]
+					const Real pi = Real(3.14159265358979323846);
+					while (travel > pi) travel -= 2 * pi;
+					while (travel <= -pi) travel += 2 * pi;
+					gradientRow(AVBDJoint<Real>::ROW_MOTOR, Real(1), scale * (travel + j.motorStep));
+				}
+				else
+				{
+					gradientRow(AVBDJoint<Real>::ROW_MOTOR, Real(1), travel - j.motorStep);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Force of one joint row. Limit rows are inequalities (C >= 0) and only push, they are inactive while inside
+	 * the range. Only equality rows and violated limits are stabilized.
+	 */
+	template<typename Real>
+	DYN_FUNC inline bool AVBD_JointRowForce(
+		const AVBDJoint<Real>& j,
+		const AVBDJointRows<Real>& rows,
+		int k,
+		Real alpha,
+		Real& C,
+		Real& F)
+	{
+		bool limit = k == AVBDJoint<Real>::ROW_MIN || k == AVBDJoint<Real>::ROW_MAX;
+		Real C0 = j.C0[k];
+		if (limit && C0 > Real(0)) C0 = Real(0);
+
+		C = rows.C[k] - alpha * C0;
+		F = j.penalty[k] * C + j.lambda[k];
+
+		if (limit && F > Real(0))
+		{
+			F = Real(0);
+			return false;
+		}
+		return true;
 	}
 
 	template<typename Real>
@@ -492,7 +602,8 @@ namespace dyno
 		AVBDJoint<Real>& j,
 		const Vector<Real, 3>* x0,
 		const Quat<Real>* q0,
-		const AVBDParams& p)
+		const AVBDParams& p,
+		Real h)
 	{
 		typedef Vector<Real, 3> Coord;
 
@@ -501,11 +612,15 @@ namespace dyno
 		AVBDJointRows<Real> rows;
 		AVBD_EvalJoint(j, x0[j.bodyA], q0[j.bodyA], hasB ? x0[j.bodyB] : Coord(0), hasB ? q0[j.bodyB] : Quat<Real>::identity(), rows);
 
+		j.base = rows.value;
+		j.motorStep = j.motorSpeed * h;
+
 		Real kMin = Real(p.penaltyMin) * j.mass;
 		Real kMax = Real(p.penaltyMax) * j.mass;
 		for (int k = 0; k < AVBDJoint<Real>::MAX_ROWS; k++)
 		{
-			j.C0[k] = (rows.mask & (1u << k)) ? rows.C[k] : Real(0);
+			// The motor row tracks a velocity and is never stabilized
+			j.C0[k] = ((rows.mask & (1u << k)) && k != AVBDJoint<Real>::ROW_MOTOR) ? rows.C[k] : Real(0);
 			j.lambda[k] *= Real(p.alpha * p.gamma);
 
 			Real pk = j.penalty[k] * Real(p.gamma);
@@ -554,8 +669,11 @@ namespace dyno
 		{
 			if (!(rows.mask & (1u << k))) continue;
 
+			Real C, F;
+			if (!AVBD_JointRowForce(j, rows, k, alpha, C, F))
+				continue;
+
 			Real K = j.penalty[k];
-			Real F = K * (rows.C[k] - alpha * j.C0[k]) + j.lambda[k];
 			if (k < 3) Fpoint[k] = F;
 
 			Coord jl = isA ? rows.jlA[k] : rows.jlB[k];
@@ -603,11 +721,16 @@ namespace dyno
 		{
 			if (!(rows.mask & (1u << k))) continue;
 
-			Real C = rows.C[k] - Real(p.alpha) * j.C0[k];
-			j.lambda[k] = j.penalty[k] * C + j.lambda[k];
+			Real C, F;
+			bool active = AVBD_JointRowForce(j, rows, k, Real(p.alpha), C, F);
+			j.lambda[k] = F;
 
-			Real pk = j.penalty[k] + beta * (C < 0 ? -C : C);
-			j.penalty[k] = pk < kMax ? pk : kMax;
+			// Inactive limits keep their penalty
+			if (active)
+			{
+				Real pk = j.penalty[k] + beta * (C < 0 ? -C : C);
+				j.penalty[k] = pk < kMax ? pk : kMax;
+			}
 		}
 	}
 

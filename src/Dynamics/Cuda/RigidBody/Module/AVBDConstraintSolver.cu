@@ -363,6 +363,11 @@ namespace dyno
 		j.bodyB = in.bodyId2;
 		j.rA = in.r1;
 		j.axisA = in.hingeAxisBody1;
+		j.useRange = in.useRange ? 1 : 0;
+		j.lo = in.d_min;
+		j.hi = in.d_max;
+		j.useMotor = in.useMoter ? 1 : 0;
+		j.motorSpeed = in.v_moter;
 		if (j.bodyB != INVALID)
 		{
 			j.rB = in.r2;
@@ -400,6 +405,11 @@ namespace dyno
 		j.bodyB = in.bodyId2;
 		j.rA = in.r1;
 		j.axisA = in.sliderAxis;
+		j.useRange = in.useRange ? 1 : 0;
+		j.lo = in.d_min;
+		j.hi = in.d_max;
+		j.useMotor = in.useMoter ? 1 : 0;
+		j.motorSpeed = in.v_moter;
 		j.qRel = Quat<Real>(in.q_init.x, in.q_init.y, in.q_init.z, in.q_init.w);
 		j.rB = j.bodyB != INVALID ? in.r2 : pos[j.bodyA] + quat[j.bodyA].rotate(in.r1);
 		AVBD_FinishJoint<Real, Coord, Matrix>(j, mass, initialInertia, att, penaltyMin);
@@ -548,16 +558,6 @@ namespace dyno
 		mJoints.resize(total);
 		if (total == 0)
 			return;
-
-		if (hinges.size() + sliders.size() > 0)
-		{
-			static bool warned = false;
-			if (!warned)
-			{
-				printf("AVBDConstraintSolver: ranges and motors of hinge and slider joints are not supported yet\n");
-				warned = true;
-			}
-		}
 
 		auto& pos = this->inCenter()->getData();
 		auto& quat = this->inQuaternion()->getData();
@@ -1159,13 +1159,14 @@ namespace dyno
 		DArray<AVBDJoint<Real>> joints,
 		DArray<Coord> x0,
 		DArray<Quat<Real>> q0,
-		AVBDParams params)
+		AVBDParams params,
+		Real h)
 	{
 		uint tId = threadIdx.x + (blockIdx.x * blockDim.x);
 		if (tId >= joints.size()) return;
 
 		AVBDJoint<Real> j = joints[tId];
-		AVBD_BeginJoint(j, x0.begin(), q0.begin(), params);
+		AVBD_BeginJoint(j, x0.begin(), q0.begin(), params, h);
 		joints[tId] = j;
 	}
 
@@ -1274,7 +1275,7 @@ namespace dyno
 		}
 
 		if (mJoints.size() > 0)
-			cuExecute(mJoints.size(), AVBD_BeginJoints, mJoints, mX0, mQ0, params);
+			cuExecute(mJoints.size(), AVBD_BeginJoints, mJoints, mX0, mQ0, params, h);
 
 		uint iterNum = this->varIterationNumber()->getValue();
 		for (uint it = 0; it < iterNum; it++)
