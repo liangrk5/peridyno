@@ -5,6 +5,7 @@
 #include "Primitive/Primitive3D.h"
 #include "Collision/NeighborElementQuery.h"
 #include "Collision/CollistionDetectionBoundingBox.h"
+#include "Collision/RigidContactDetection.h"
 
 #include "RigidBody/Module/TJConstraintSolver.h"
 #include "RigidBody/Module/TJSConstraintSolver.h"
@@ -12,6 +13,7 @@
 #include "RigidBody/Module/PJSConstraintSolver.h"
 #include "RigidBody/Module/PJSoftConstraintSolver.h"
 #include "RigidBody/Module/PCGConstraintSolver.h"
+#include "RigidBody/Module/AVBDConstraintSolver.h"
 #include "RigidBody/Module/CarDriver.h"
 
 //Module headers
@@ -31,6 +33,30 @@ namespace dyno
 		auto defaultTopo = std::make_shared<DiscreteElements<TDataType>>();
 		this->stateTopology()->setDataPtr(std::make_shared<DiscreteElements<TDataType>>());
 
+		auto cdBV = std::make_shared<CollistionDetectionBoundingBox<TDataType>>();
+		this->stateTopology()->connect(cdBV->inDiscreteElements());
+		this->animationPipeline()->pushModule(cdBV);
+		mBoundaryDetection = cdBV;
+
+		setupTJSPipeline();
+
+		auto solverCallback = std::make_shared<FCallBackFunc>(std::bind(&RigidBodySystem<TDataType>::switchConstraintSolver, this));
+		this->varConstraintSolver()->attach(solverCallback);
+
+		auto saveCallback = std::make_shared<FCallBackFunc>(std::bind(&RigidBodySystem<TDataType>::saveToFile, this));
+		this->varSaveConfigPath()->attach(saveCallback);
+
+		this->setDt(0.016f);
+	}
+
+	template<typename TDataType>
+	RigidBodySystem<TDataType>::~RigidBodySystem()
+	{
+	}
+
+	template<typename TDataType>
+	void RigidBodySystem<TDataType>::setupTJSPipeline()
+	{
 		auto elementQuery = std::make_shared<NeighborElementQuery<TDataType>>();
 		this->stateTopology()->connect(elementQuery->inDiscreteElements());
 		this->stateCollisionMask()->connect(elementQuery->inCollisionMask());
@@ -38,9 +64,7 @@ namespace dyno
 		this->animationPipeline()->pushModule(elementQuery);
 		//elementQuery->varSelfCollision()->setValue(false);
 
-		auto cdBV = std::make_shared<CollistionDetectionBoundingBox<TDataType>>();
-		this->stateTopology()->connect(cdBV->inDiscreteElements());
-		this->animationPipeline()->pushModule(cdBV);
+		auto cdBV = std::dynamic_pointer_cast<CollistionDetectionBoundingBox<TDataType>>(mBoundaryDetection);
 
 		auto merge = std::make_shared<ContactsUnion<TDataType>>();
 		elementQuery->outContacts()->connect(merge->inContactsA());
@@ -70,15 +94,63 @@ namespace dyno
 		merge->outContacts()->connect(iterSolver->inContacts());
 		this->animationPipeline()->pushModule(iterSolver);
 
-		auto saveCallback = std::make_shared<FCallBackFunc>(std::bind(&RigidBodySystem<TDataType>::saveToFile, this));
-		this->varSaveConfigPath()->attach(saveCallback);
-
-		this->setDt(0.016f);
+		mSolverModules = { elementQuery, merge, iterSolver };
+		mActiveSolver = EConstraintSolver::TJS;
 	}
 
 	template<typename TDataType>
-	RigidBodySystem<TDataType>::~RigidBodySystem()
+	void RigidBodySystem<TDataType>::setupAVBDPipeline()
 	{
+		auto contactDetection = std::make_shared<RigidContactDetection<TDataType>>();
+		// Speculative contacts within a small gap keep resting contacts alive across frames
+		contactDetection->varDHead()->setValue(0.002f);
+		this->stateTopology()->connect(contactDetection->inDiscreteElements());
+		this->stateCollisionMask()->connect(contactDetection->inCollisionMask());
+		this->stateAttribute()->connect(contactDetection->inAttribute());
+		this->animationPipeline()->pushModule(contactDetection);
+
+		auto cdBV = std::dynamic_pointer_cast<CollistionDetectionBoundingBox<TDataType>>(mBoundaryDetection);
+
+		auto solver = std::make_shared<AVBDConstraintSolver<TDataType>>();
+		this->stateTimeStep()->connect(solver->inTimeStep());
+		this->varFrictionEnabled()->quote(solver->varFrictionEnabled());
+		this->varGravityEnabled()->quote(solver->varGravityEnabled());
+		this->varGravityValue()->quote(solver->varGravityValue());
+		this->stateMass()->connect(solver->inMass());
+
+		this->stateFrictionCoefficients()->connect(solver->inFrictionCoefficients());
+		this->stateAttribute()->connect(solver->inAttribute());
+		this->stateCenter()->connect(solver->inCenter());
+		this->stateVelocity()->connect(solver->inVelocity());
+		this->stateAngularVelocity()->connect(solver->inAngularVelocity());
+		this->stateRotationMatrix()->connect(solver->inRotationMatrix());
+		this->stateInertia()->connect(solver->inInertia());
+		this->stateQuaternion()->connect(solver->inQuaternion());
+		this->stateInitialInertia()->connect(solver->inInitialInertia());
+		this->stateTopology()->connect(solver->inDiscreteElements());
+		contactDetection->outManifolds()->connect(solver->inManifolds());
+		cdBV->outContacts()->connect(solver->inContacts());
+		this->animationPipeline()->pushModule(solver);
+
+		mSolverModules = { contactDetection, solver };
+		mActiveSolver = EConstraintSolver::AVBD;
+	}
+
+	template<typename TDataType>
+	void RigidBodySystem<TDataType>::switchConstraintSolver()
+	{
+		int target = this->varConstraintSolver()->currentKey();
+		if (target == mActiveSolver)
+			return;
+
+		for (auto m : mSolverModules)
+			this->animationPipeline()->popModule(m);
+		mSolverModules.clear();
+
+		if (target == EConstraintSolver::AVBD)
+			setupAVBDPipeline();
+		else
+			setupTJSPipeline();
 	}
 
 	template<typename Real>

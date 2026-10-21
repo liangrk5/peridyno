@@ -20,6 +20,7 @@
 #include "Collision/Attribute.h"
 #include "Collision/CollisionData.h"
 #include "Field/FilePath.h"
+#include "DeclareEnum.h"
 #include <vector>
 #include <iostream>
 #include "MultiBodyTuple.h"
@@ -194,6 +195,12 @@ namespace dyno
 
 		DEF_VAR(Real, Slop, 0.0001, "");
 
+		DECLARE_ENUM(EConstraintSolver,
+			TJS = 0,
+			AVBD = 1);
+
+		DEF_ENUM(EConstraintSolver, ConstraintSolver, EConstraintSolver::TJS, "TJS: NeighborElementQuery + TJSConstraintSolver; AVBD: RigidContactDetection + AVBDConstraintSolver");
+
 		DEF_VAR(SaveFilePath, SaveConfigPath, SaveFilePath("", "Peridyno Multibody Files (*.pdm)"), "");
 
 		DEF_INSTANCE_STATE(DiscreteElements<TDataType>, Topology, "Topology");
@@ -237,6 +244,15 @@ namespace dyno
 
 	private:
 		void setupShape2RigidBodyMapping();
+
+		void setupTJSPipeline();
+		void setupAVBDPipeline();
+		void switchConstraintSolver();
+
+		// Modules of the active contact and constraint pipeline, replaced when ConstraintSolver changes
+		std::vector<std::shared_ptr<Module>> mSolverModules;
+		std::shared_ptr<Module> mBoundaryDetection;
+		int mActiveSolver = -1;
 
 		std::vector<RigidBodyInfo> mHostRigidBodyStates;
 
