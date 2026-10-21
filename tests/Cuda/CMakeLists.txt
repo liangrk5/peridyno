@@ -11,6 +11,10 @@ add_subdirectory(Test_Pipeline)
 add_subdirectory(Test_CCD)
 add_subdirectory(Test_Serialization)
 
+if(PERIDYNO_LIBRARY_RIGIDBODY)
+    add_subdirectory(Test_RigidBody)
+endif()
+
 if(PERIDYNO_LIBRARY_VOLUME)
     add_subdirectory(Test_Volume)
 endif()
