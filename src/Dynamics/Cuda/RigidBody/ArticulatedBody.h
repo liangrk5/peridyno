@@ -66,6 +66,9 @@ namespace dyno
 		DEF_VAR(bool, DoTransform, true, "");
 
 	protected:
+		void setupTJSPipeline() override;
+		void setupAVBDPipeline() override;
+
 		void resetStates() override;
 
 		void updateStates() override;

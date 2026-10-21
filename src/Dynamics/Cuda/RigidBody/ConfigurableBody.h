@@ -49,6 +49,9 @@ namespace dyno
 		void saveToPath(std::string path);
 
 	protected:
+		void setupTJSPipeline() override;
+		void setupAVBDPipeline() override;
+
 		void resetStates() override;
 		void saveToFile() override;
 		void loadFromFile();

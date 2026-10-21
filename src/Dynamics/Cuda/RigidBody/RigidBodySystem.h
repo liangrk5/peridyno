@@ -245,14 +245,7 @@ namespace dyno
 	private:
 		void setupShape2RigidBodyMapping();
 
-		void setupTJSPipeline();
-		void setupAVBDPipeline();
 		void switchConstraintSolver();
-
-		// Modules of the active contact and constraint pipeline, replaced when ConstraintSolver changes
-		std::vector<std::shared_ptr<Module>> mSolverModules;
-		std::shared_ptr<Module> mBoundaryDetection;
-		int mActiveSolver = -1;
 
 		std::vector<RigidBodyInfo> mHostRigidBodyStates;
 
@@ -281,6 +274,23 @@ namespace dyno
 		std::vector<Pair<uint, uint>> mHostShape2RigidBodyMapping;
 
 	protected:
+		/**
+		 * Build the contact and constraint modules of the animation pipeline for the TJS or the AVBD solver and
+		 * record them in mSolverModules, so that they can be replaced when ConstraintSolver changes. Subclasses
+		 * that build their own pipeline override both.
+		 */
+		virtual void setupTJSPipeline();
+		virtual void setupAVBDPipeline();
+
+		/**
+		 * RigidContactDetection + AVBDConstraintSolver connected to the states of this node. Returns the contact
+		 * detection module so that callers can connect an environment mesh.
+		 */
+		std::shared_ptr<Module> pushAVBDModules(bool selfCollision, bool boundaryBox);
+
+		// Modules of the active contact and constraint pipeline
+		std::vector<std::shared_ptr<Module>> mSolverModules;
+		int mActiveSolver = -1;
 
 		const std::vector<RigidBodyInfo>& getRigidBodyStates() { return mHostRigidBodyStates; }
 

@@ -33,12 +33,7 @@ namespace dyno
 		auto defaultTopo = std::make_shared<DiscreteElements<TDataType>>();
 		this->stateTopology()->setDataPtr(std::make_shared<DiscreteElements<TDataType>>());
 
-		auto cdBV = std::make_shared<CollistionDetectionBoundingBox<TDataType>>();
-		this->stateTopology()->connect(cdBV->inDiscreteElements());
-		this->animationPipeline()->pushModule(cdBV);
-		mBoundaryDetection = cdBV;
-
-		setupTJSPipeline();
+		RigidBodySystem<TDataType>::setupTJSPipeline();
 
 		auto solverCallback = std::make_shared<FCallBackFunc>(std::bind(&RigidBodySystem<TDataType>::switchConstraintSolver, this));
 		this->varConstraintSolver()->attach(solverCallback);
@@ -64,7 +59,9 @@ namespace dyno
 		this->animationPipeline()->pushModule(elementQuery);
 		//elementQuery->varSelfCollision()->setValue(false);
 
-		auto cdBV = std::dynamic_pointer_cast<CollistionDetectionBoundingBox<TDataType>>(mBoundaryDetection);
+		auto cdBV = std::make_shared<CollistionDetectionBoundingBox<TDataType>>();
+		this->stateTopology()->connect(cdBV->inDiscreteElements());
+		this->animationPipeline()->pushModule(cdBV);
 
 		auto merge = std::make_shared<ContactsUnion<TDataType>>();
 		elementQuery->outContacts()->connect(merge->inContactsA());
@@ -94,22 +91,22 @@ namespace dyno
 		merge->outContacts()->connect(iterSolver->inContacts());
 		this->animationPipeline()->pushModule(iterSolver);
 
-		mSolverModules = { elementQuery, merge, iterSolver };
+		mSolverModules = { elementQuery, cdBV, merge, iterSolver };
 		mActiveSolver = EConstraintSolver::TJS;
 	}
 
 	template<typename TDataType>
-	void RigidBodySystem<TDataType>::setupAVBDPipeline()
+	std::shared_ptr<Module> RigidBodySystem<TDataType>::pushAVBDModules(bool selfCollision, bool boundaryBox)
 	{
 		auto contactDetection = std::make_shared<RigidContactDetection<TDataType>>();
+		contactDetection->varSelfCollision()->setValue(selfCollision);
 		// Speculative contacts within a small gap keep resting contacts alive across frames
 		contactDetection->varDHead()->setValue(0.002f);
 		this->stateTopology()->connect(contactDetection->inDiscreteElements());
 		this->stateCollisionMask()->connect(contactDetection->inCollisionMask());
 		this->stateAttribute()->connect(contactDetection->inAttribute());
 		this->animationPipeline()->pushModule(contactDetection);
-
-		auto cdBV = std::dynamic_pointer_cast<CollistionDetectionBoundingBox<TDataType>>(mBoundaryDetection);
+		mSolverModules.push_back(contactDetection);
 
 		auto solver = std::make_shared<AVBDConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(solver->inTimeStep());
@@ -129,11 +126,28 @@ namespace dyno
 		this->stateInitialInertia()->connect(solver->inInitialInertia());
 		this->stateTopology()->connect(solver->inDiscreteElements());
 		contactDetection->outManifolds()->connect(solver->inManifolds());
-		cdBV->outContacts()->connect(solver->inContacts());
-		this->animationPipeline()->pushModule(solver);
 
-		mSolverModules = { contactDetection, solver };
+		if (boundaryBox)
+		{
+			auto cdBV = std::make_shared<CollistionDetectionBoundingBox<TDataType>>();
+			this->stateTopology()->connect(cdBV->inDiscreteElements());
+			this->animationPipeline()->pushModule(cdBV);
+			cdBV->outContacts()->connect(solver->inContacts());
+			mSolverModules.push_back(cdBV);
+		}
+
+		this->animationPipeline()->pushModule(solver);
+		mSolverModules.push_back(solver);
+
 		mActiveSolver = EConstraintSolver::AVBD;
+		return contactDetection;
+	}
+
+	template<typename TDataType>
+	void RigidBodySystem<TDataType>::setupAVBDPipeline()
+	{
+		mSolverModules.clear();
+		pushAVBDModules(true, true);
 	}
 
 	template<typename TDataType>

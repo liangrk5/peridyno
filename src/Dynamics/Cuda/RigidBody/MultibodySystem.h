@@ -48,6 +48,9 @@ namespace dyno
 		DEF_ARRAYLIST_STATE(Transform3f, InstanceTransform, DeviceType::GPU, "Instance transforms");
 
 	protected:
+		void setupTJSPipeline() override;
+		void setupAVBDPipeline() override;
+
 		void resetStates() override;
 
 		void preUpdateStates() override;

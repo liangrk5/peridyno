@@ -34,7 +34,9 @@ namespace dyno
 		auto saveCallback = std::make_shared<FCallBackFunc>(std::bind(&ArticulatedBody<TDataType>::saveToFile, this));
 		this->varSaveConfigPath()->attach(saveCallback);
 
+		// Subclasses build the physics, see setupTJSPipeline and setupAVBDPipeline
 		this->animationPipeline()->clear();
+		this->mSolverModules.clear();
 		
 		auto transformer = std::make_shared<InstanceTransform<DataType3f>>();
 		this->stateCenter()->connect(transformer->inCenter());
@@ -52,6 +54,18 @@ namespace dyno
 		this->setForceUpdate(true);
 		
 		
+	}
+
+	template<typename TDataType>
+	void ArticulatedBody<TDataType>::setupTJSPipeline()
+	{
+		this->mActiveSolver = RigidBodySystem<TDataType>::TJS;
+	}
+
+	template<typename TDataType>
+	void ArticulatedBody<TDataType>::setupAVBDPipeline()
+	{
+		this->mActiveSolver = RigidBodySystem<TDataType>::AVBD;
 	}
 
 	template<typename TDataType>

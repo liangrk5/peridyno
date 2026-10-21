@@ -5,6 +5,7 @@
 //Collision
 #include "Collision/NeighborElementQuery.h"
 #include "Collision/CollistionDetectionTriangleSet.h"
+#include "Collision/RigidContactDetection.h"
 
 //RigidBody
 #include "Module/ContactsUnion.h"
@@ -90,16 +91,17 @@ namespace dyno
 	}
 
 	template<typename TDataType>
-	ConfigurableBody<TDataType>::ConfigurableBody()
-		: ParametricModel<TDataType>()
-		, ArticulatedBody<TDataType>()
+	void ConfigurableBody<TDataType>::setupTJSPipeline()
 	{
+		this->mSolverModules.clear();
+
 		auto elementQuery = std::make_shared<NeighborElementQuery<TDataType>>();
 		elementQuery->varSelfCollision()->setValue(false);
 		this->stateTopology()->connect(elementQuery->inDiscreteElements());
 		this->stateCollisionMask()->connect(elementQuery->inCollisionMask());
 		this->stateAttribute()->connect(elementQuery->inAttribute());
 		this->animationPipeline()->pushModule(elementQuery);
+		this->mSolverModules.push_back(elementQuery);
 
 		auto cdBV = std::make_shared<CollistionDetectionTriangleSet<TDataType>>();
 		this->stateTopology()->connect(cdBV->inDiscreteElements());
@@ -107,12 +109,14 @@ namespace dyno
 		// 		auto cdBV = std::make_shared<CollistionDetectionBoundingBox<TDataType>>();
 		// 		this->stateTopology()->connect(cdBV->inDiscreteElements());
 		this->animationPipeline()->pushModule(cdBV);
+		this->mSolverModules.push_back(cdBV);
 
 
 		auto merge = std::make_shared<ContactsUnion<TDataType>>();
 		elementQuery->outContacts()->connect(merge->inContactsA());
 		cdBV->outContacts()->connect(merge->inContactsB());
 		this->animationPipeline()->pushModule(merge);
+		this->mSolverModules.push_back(merge);
 
 		auto iterSolver = std::make_shared<TJConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(iterSolver->inTimeStep());
@@ -120,7 +124,6 @@ namespace dyno
 		this->varGravityEnabled()->quote(iterSolver->varGravityEnabled());
 		this->varGravityValue()->quote(iterSolver->varGravityValue());
 		//this->varFrictionCoefficient()->connect(iterSolver->varFrictionCoefficient());
-		this->varFrictionCoefficient()->setValue(20.0f);
 		this->varSlop()->quote(iterSolver->varSlop());
 		this->stateMass()->connect(iterSolver->inMass());
 		this->stateCenter()->connect(iterSolver->inCenter());
@@ -136,6 +139,26 @@ namespace dyno
 		merge->outContacts()->connect(iterSolver->inContacts());
 
 		this->animationPipeline()->pushModule(iterSolver);
+		this->mSolverModules.push_back(iterSolver);
+
+		this->mActiveSolver = RigidBodySystem<TDataType>::TJS;
+	}
+
+	template<typename TDataType>
+	void ConfigurableBody<TDataType>::setupAVBDPipeline()
+	{
+		this->mSolverModules.clear();
+		auto contactDetection = std::dynamic_pointer_cast<RigidContactDetection<TDataType>>(this->pushAVBDModules(false, false));
+		this->inTriangleSet()->connect(contactDetection->inTriangleSet());
+	}
+
+	template<typename TDataType>
+	ConfigurableBody<TDataType>::ConfigurableBody()
+		: ParametricModel<TDataType>()
+		, ArticulatedBody<TDataType>()
+	{
+		this->varFrictionCoefficient()->setValue(20.0f);
+		ConfigurableBody<TDataType>::setupTJSPipeline();
 
 		this->inTriangleSet()->tagOptional(true);
 		this->varFilePath()->tagOptional(true);
